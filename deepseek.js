@@ -7,7 +7,7 @@ const DEFAULT_PROFILE =
   'Not interested in intern, principal/staff, manager, QA, DevOps, or Python/Java-only roles.';
 
 // Returns the parsed JSON answer, or null when there is no key or the call failed.
-async function deepseekJson(system, user) {
+async function deepseekJson(system, user, maxTokens = 300) {
   const { deepseekKey } = await chrome.storage.local.get('deepseekKey');
   if (!deepseekKey) return null;
   try {
@@ -18,7 +18,7 @@ async function deepseekJson(system, user) {
       body: JSON.stringify({
         model: 'deepseek-chat',
         temperature: 0,
-        max_tokens: 300,
+        max_tokens: maxTokens,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: `${system} Reply with JSON only.` },

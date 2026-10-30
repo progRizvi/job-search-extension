@@ -1,6 +1,9 @@
 // Checks the links saved by the country search: reads the page, follows the links DeepSeek picks,
 // and keeps the best job that is remote and open to someone in the searched country.
 const CHECK_DAILY_LIMIT = 300;
+const LIST_LOADS = 4; // times a list page is asked for more jobs
+const MAX_LIST = 150; // job cards read per list
+const MAX_LIST_SAVED = 50; // matching jobs kept from one list
 const MAX_READ = 8; // job pages opened per link
 const MAX_SAVED = 5; // matching jobs kept per link
 const CHECK_FIT_RANK = { good: 2, maybe: 1, '': 0 };
@@ -33,6 +36,49 @@ async function checkerPause(sec) {
   }
   await setChecker({ nextAt: null });
   return true;
+}
+
+// Keeps asking a list page for more jobs ("Show more jobs" / next page) and merges what it finds.
+async function expandList(tabId, page) {
+  const all = new Map(page.titles.map((t) => [t.url, t]));
+  for (let i = 0; i < LIST_LOADS && all.size < MAX_LIST; i++) {
+    if (!(await getChecker()).running) break;
+    await setChecker({ message: `Loading more jobs (${all.size} so far)…` });
+    let more;
+    try { more = await run(tabId, loadMoreJobs); } catch { break; }
+    if (more.next) {
+      try { await openPage(tabId, more.next); } catch { break; }
+    } else if (!more.clicked) break;
+    let again;
+    try { again = await run(tabId, analyzeJobsPage); } catch { break; }
+    const before = all.size;
+    again.titles.forEach((t) => { if (!all.has(t.url)) all.set(t.url, t); });
+    if (all.size === before) break;
+  }
+  return { ...page, titles: [...all.values()].slice(0, MAX_LIST) };
+}
+
+// Judges every job card on a list from its title and card text, in batches. Returns the ones that could suit, best first.
+async function judgeList(titles, country) {
+  const out = [];
+  for (let s = 0; s < titles.length; s += 40) {
+    const chunk = titles.slice(s, s + 40);
+    await setChecker({ message: `Judging ${Math.min(s + 40, titles.length)} of ${titles.length} jobs…` });
+    const ai = await deepseekJson(
+      `You screen job cards for a candidate. Candidate: ${await getProfile()} ${country === 'Anywhere' ? 'The candidate can work from any country' : `The candidate lives in ${country}`} and wants remote jobs. ` +
+        'For each numbered card decide whether the role and stack could suit the candidate, and whether it is remote. ' +
+        'Answer as {"matches": [{"i": card number, "fit": "good" | "maybe", "remote": "yes" | "no" | "unknown"}]}. ' +
+        'List only cards that could suit. Leave out cards that are unsuitable or clearly on-site.',
+      chunk.map((t, i) => `${i}. ${t.title} | ${t.text || ''}`).join('\n'),
+      1500
+    );
+    for (const m of (ai && Array.isArray(ai.matches) ? ai.matches : [])) {
+      const t = chunk[m.i];
+      if (!t || m.remote === 'no') continue;
+      out.push({ title: t.title, url: t.url, fit: m.fit === 'good' ? 'good' : 'maybe', remote: m.remote === 'yes' ? 'yes' : 'unknown' });
+    }
+  }
+  return out.sort((x, y) => CHECK_FIT_RANK[y.fit] - CHECK_FIT_RANK[x.fit]);
 }
 
 // Opens one saved link and returns what to store: {status, kind, result?}.
@@ -84,14 +130,24 @@ async function checkUrl(tabId, item) {
   const base = { careersUrl: listUrl, openings: page.titles.length ? 'yes' : 'no', checkedBy: 'DeepSeek' };
   if (!page.titles.length) return { status: 'checked', kind, results: [base] };
 
-  // Shortlist titles, then read each job and judge it for the searched country.
   const country = item.countries[0] || '';
-  const short = await deepseekJson(
+  // A long list: read all of it and judge the cards, then open only the best few to confirm.
+  const isList = page.titles.length > 5;
+  let fromList = [];
+  if (isList) {
+    page = await expandList(tabId, page);
+    fromList = await judgeList(page.titles, country);
+  }
+
+  // Shortlist titles, then read each job and judge it for the searched country.
+  const short = isList ? null : await deepseekJson(
     `You match job openings to a candidate. Candidate: ${await getProfile()} From the numbered job titles choose up to ${MAX_READ} that best fit, best first. ` +
       'The candidate only wants remote roles. Use an empty list if none is a reasonable fit. Answer as {"indexes": [numbers]}.',
     page.titles.map((t, i) => `${i}. ${t.title}`).join('\n')
   );
-  const picks = short && Array.isArray(short.indexes)
+  const picks = isList
+    ? fromList.slice(0, MAX_READ).map((j) => ({ title: j.title, url: j.url }))
+    : short && Array.isArray(short.indexes)
     ? short.indexes.filter((i) => Number.isInteger(i) && page.titles[i]).slice(0, MAX_READ).map((i) => page.titles[i])
     : page.backend.slice(0, MAX_READ);
 
@@ -129,7 +185,14 @@ async function checkUrl(tabId, item) {
   }
   // Best first: confirmed scope before unstated, then good fits before maybes.
   const rank = (l) => l.sort((x, y) => CHECK_FIT_RANK[y.fit] - CHECK_FIT_RANK[x.fit]);
-  const kept = [...rank(strict), ...rank(unstated)].slice(0, MAX_SAVED);
+  const verified = [...rank(strict), ...rank(unstated)].slice(0, MAX_SAVED);
+  // The rest of the list: judged from the card only, not opened.
+  const seen = new Set(verified.map((j) => j.url));
+  const unopened = fromList.filter((j) => !seen.has(j.url)).map((j) => ({
+    fit: j.fit, title: j.title, url: j.url, workType: j.remote === 'yes' ? 'remote' : 'unknown',
+    remoteScope: j.remote === 'yes' ? 'remote (from list)' : 'unknown (from list)', stack: '',
+  }));
+  const kept = [...verified, ...unopened].slice(0, isList ? MAX_LIST_SAVED : MAX_SAVED);
   return {
     status: 'checked', kind,
     results: kept.length

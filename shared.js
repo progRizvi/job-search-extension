@@ -240,6 +240,16 @@ async function analyzeJobsPage() {
   const NAV = /^(careers?|jobs?|apply|apply now|view all|see all|all jobs|open positions|learn more|benefits|culture|about|home|contact|life at.*|our team)$/i;
   const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|\/job-listing\/|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
 
+  // The text of the card around a job link (company, place, tags), so a list can be judged without opening each job.
+  const cardText = (a) => {
+    let n = a;
+    for (let i = 0; i < 4 && n.parentElement; i++) {
+      if ((n.parentElement.innerText || '').length > 400) break;
+      n = n.parentElement;
+    }
+    return (n.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 260);
+  };
+
   const jobs = new Map();
   for (const a of document.querySelectorAll('a[href]')) {
     // A job card often holds title, team and "Apply" on separate lines; the title is the first.
@@ -249,9 +259,9 @@ async function analyzeJobsPage() {
     try { u = new URL(a.href); } catch { continue; }
     if (!/^https?:$/.test(u.protocol) || !JOBLINK.test(u.hostname + u.pathname)) continue;
     const url = u.href.split('#')[0];
-    if (!jobs.has(url)) jobs.set(url, title);
+    if (!jobs.has(url)) jobs.set(url, { title, text: cardText(a) });
   }
-  const all = [...jobs].map(([url, title]) => ({ url, title }));
+  const all = [...jobs].map(([url, v]) => ({ url, title: v.title, text: v.text }));
 
   // Landing pages ("Work with us") often hide the job list one click deeper: "View open jobs".
   const LIST = /\b(view|see|browse|explore|search|all)\b.{0,12}\b(open )?(jobs|positions|roles|openings|vacancies)\b|current (openings|vacancies|jobs)|open (positions|roles|jobs)/i;
@@ -274,7 +284,7 @@ async function analyzeJobsPage() {
     .sort((x, y) => rank(y.title) - rank(x.title))
     .slice(0, 3);
   const textBackend = BACKEND_TITLE.test(text) ? (text.match(BACKEND_TITLE) || [''])[0] : '';
-  return { notFound: /\b(404|page not found|not found|doesn.t exist)\b/i.test(text.slice(0, 400)), noJobs, jobCount: all.length, listLinks: listLinks.slice(0, 2), backend, titles: all.slice(0, 80), text: text.replace(/\s+/g, ' ').trim().slice(0, 6000), textBackend, pageUrl: location.href.split('#')[0] };
+  return { notFound: /\b(404|page not found|not found|doesn.t exist)\b/i.test(text.slice(0, 400)), noJobs, jobCount: all.length, listLinks: listLinks.slice(0, 2), backend, titles: all.slice(0, 200), text: text.replace(/\s+/g, ' ').trim().slice(0, 6000), textBackend, pageUrl: location.href.split('#')[0] };
 }
 
 // Injected into a single job posting: its visible text, trimmed for the model.
@@ -436,4 +446,22 @@ function remoteMatches(remoteScope, workType, countryName, countries = []) {
     return [countryName, ...countries].map((x) => String(x || '').toLowerCase()).filter(Boolean).some((n) => s.includes(n));
   }
   return false;
+}
+
+// Injected into a job list: loads the next batch. Clicks a "Show more jobs" button, or returns the link to the next page.
+async function loadMoreJobs() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const btn = [...document.querySelectorAll('button, [role="button"]')].find(
+    (b) => /^(show|load|see|view) more( jobs| results)?$|^more jobs$/i.test((b.innerText || '').trim()) && !b.disabled && b.offsetParent
+  );
+  if (btn) {
+    btn.scrollIntoView({ block: 'center' });
+    btn.click();
+    await sleep(3500);
+    return { clicked: true };
+  }
+  const next = [...document.querySelectorAll('a[href]')].find(
+    (a) => a.rel === 'next' || a.getAttribute('aria-label') === 'Next' || /^(next|next page)$/i.test((a.innerText || '').trim())
+  );
+  return next ? { next: next.href } : {};
 }
