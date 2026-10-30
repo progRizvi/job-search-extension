@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Company Copier</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icons/icon48.png" width="24" height="24" alt="">
+    <h1>Company Copier</h1>
+    <span id="state" class="state" data-s="ready">Ready</span>
+  </header>
+
+  <section class="budget">
+    <p class="big"><span id="count">0</span><span class="of"> of 10 pages today</span></p>
+    <div id="segs" class="segs" role="img" aria-label="0 of 10 pages used today"></div>
+    <p class="sub"><span id="saved">0 companies saved</span><span>Resets at midnight</span></p>
+  </section>
+
+  <button id="main" class="primary" type="button">Start copying</button>
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <div id="resumeRow" class="row">
+    <button id="resume" class="quiet" type="button">Resume from your last page</button>
+    <button id="viewUrl" class="quiet subtle" type="button" aria-expanded="false">View URL</button>
+  </div>
+  <div id="urlBox" class="urlbox" hidden>
+    <p id="urlText"></p>
+    <div class="urlactions">
+      <button id="urlOpen" type="button">Open in new tab</button>
+      <button id="urlCopy" type="button">Copy link</button>
+    </div>
+  </div>
+  <button id="scrape" class="quiet" type="button">Copy this page only</button>
+  <button id="sites" class="quiet" type="button">Find websites on Google</button>
+  <button id="recheck" class="quiet" type="button" hidden>Re-check websites with DeepSeek</button>
+  <button id="jobs" class="quiet" type="button">Find backend jobs</button>
+  <button id="resetJobs" class="quiet" type="button" hidden>Reset job results</button>
+
+  <details id="review" class="review">
+    <summary>Review websites</summary>
+    <p class="hint">Tick the companies whose website looks wrong, then re-search them with DeepSeek. Domains that do not look related to the name are marked.</p>
+    <input id="reviewFilter" type="search" placeholder="Filter by name or domain" autocomplete="off">
+    <div class="reviewTools">
+      <button id="selUnrelated" type="button">Select unrelated</button>
+      <button id="selNone" type="button">Clear selection</button>
+    </div>
+    <div id="reviewList" class="reviewList" role="group" aria-label="Saved websites"></div>
+    <button id="researchSel" class="primary small" type="button" disabled>Re-search selected with DeepSeek</button>
+    <p id="reviewNote" class="hint"></p>
+  </details>
+
+  <div class="exports">
+    <button id="xlsx" type="button">Export to Excel</button>
+    <button id="copyAll" type="button">Copy all</button>
+  </div>
+
+  <button id="clear" class="danger" type="button">Clear saved companies</button>
+
+  <details class="settings">
+    <summary>DeepSeek (optional)</summary>
+    <p class="hint">Picks the right website and the best-fitting job more accurately. Sends company names, Google result titles and job titles to DeepSeek.</p>
+    <input id="dsKey" type="password" placeholder="Paste your API key" autocomplete="off" spellcheck="false">
+    <div class="dsrow">
+      <button id="dsSave" type="button">Save key</button>
+      <button id="dsTest" type="button">Test key</button>
+      <button id="dsRemove" type="button">Remove key</button>
+    </div>
+    <p id="dsStatus" role="status"></p>
+  </details>
+
+  <script src="shared.js"></script>
+  <script src="xlsx.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
