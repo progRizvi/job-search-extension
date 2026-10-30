@@ -10,8 +10,12 @@
   <header class="top">
     <img src="icons/icon48.png" width="24" height="24" alt="">
     <h1>Company Copier</h1>
-    <span id="state" class="state" data-s="ready">Ready</span>
   </header>
+
+  <section id="now" class="now" data-s="idle" role="status" aria-live="polite">
+    <span class="pulse" aria-hidden="true"></span>
+    <div><strong id="nowTitle">Ready</strong><span id="nowMsg"></span></div>
+  </section>
 
   <section class="budget">
     <p class="big"><span id="count">0</span><span class="of"> of 10 pages today</span></p>
@@ -20,76 +24,15 @@
   </section>
 
   <button id="main" class="primary" type="button">Start copying</button>
-  <p id="status" role="status" aria-live="polite"></p>
-
-  <div id="resumeRow" class="row">
-    <button id="resume" class="quiet" type="button">Resume from your last page</button>
-    <button id="viewUrl" class="quiet subtle" type="button" aria-expanded="false">View URL</button>
-  </div>
-  <div id="urlBox" class="urlbox" hidden>
-    <p id="urlText"></p>
-    <div class="urlactions">
-      <button id="urlOpen" type="button">Open in new tab</button>
-      <button id="urlCopy" type="button">Copy link</button>
-    </div>
-  </div>
-  <button id="scrape" class="quiet" type="button">Copy this page only</button>
-  <button id="sites" class="quiet" type="button">Find websites on Google</button>
-  <button id="recheck" class="quiet" type="button" hidden>Re-check websites with DeepSeek</button>
-  <button id="jobs" class="quiet" type="button">Find backend jobs</button>
-  <button id="resetJobs" class="quiet" type="button" hidden>Reset job results</button>
-
-  <details id="review" class="review">
-    <summary>Review websites</summary>
-    <p class="hint">Tick the companies whose website looks wrong, then re-search them with DeepSeek. Domains that do not look related to the name are marked.</p>
-    <input id="reviewFilter" type="search" placeholder="Filter by name or domain" autocomplete="off">
-    <div class="reviewTools">
-      <button id="selUnrelated" type="button">Select unrelated</button>
-      <button id="selNone" type="button">Clear selection</button>
-    </div>
-    <div id="reviewList" class="reviewList" role="group" aria-label="Saved websites"></div>
-    <button id="researchSel" class="primary small" type="button" disabled>Re-search selected with DeepSeek</button>
-    <p id="reviewNote" class="hint"></p>
-  </details>
-
-  <details id="geo" class="review">
-    <summary>Country job search</summary>
-    <p class="hint">Searches the web country by country for remote Node, PHP, backend and full-stack jobs, and saves every result link in your local database.</p>
-    <p id="geoServer" class="hint" role="status"></p>
-    <input id="geoKey" type="password" placeholder="Server key (LEAD_KEY from server/.env)" autocomplete="off" spellcheck="false">
-    <div class="reviewTools">
-      <button id="geoSaveKey" type="button">Save key</button>
-    </div>
-    <p id="geoProgress" class="hint"></p>
-    <button id="geoMain" class="primary small" type="button" disabled>Start country search</button>
-    <p id="geoNote" class="hint" role="status" aria-live="polite"></p>
-    <button id="chkMain" class="primary small" type="button" disabled>Check saved links for jobs</button>
-    <p id="chkNote" class="hint" role="status" aria-live="polite"></p>
-    <button id="geoExport" class="quiet" type="button">Export leads to Excel</button>
-  </details>
-
-  <div class="exports">
-    <button id="xlsx" type="button">Export to Excel</button>
-    <button id="copyAll" type="button">Copy all</button>
+  <p id="hint" class="hint" role="status"></p>
+  <div class="row">
+    <button id="resume" class="link" type="button">Resume last page</button>
+    <button id="scrape" class="link" type="button">Copy this page only</button>
   </div>
 
-  <button id="clear" class="danger" type="button">Clear saved companies</button>
-
-  <details class="settings">
-    <summary>DeepSeek (optional)</summary>
-    <p class="hint">Picks the right website and the best-fitting job more accurately. Sends company names, Google result titles and job titles to DeepSeek.</p>
-    <input id="dsKey" type="password" placeholder="Paste your API key" autocomplete="off" spellcheck="false">
-    <div class="dsrow">
-      <button id="dsSave" type="button">Save key</button>
-      <button id="dsTest" type="button">Test key</button>
-      <button id="dsRemove" type="button">Remove key</button>
-    </div>
-    <p id="dsStatus" role="status"></p>
-  </details>
+  <button id="open" class="workspace" type="button">Open workspace</button>
 
   <script src="shared.js"></script>
-  <script src="xlsx.js"></script>
-  <script src="serverClient.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

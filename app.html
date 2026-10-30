@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Company Copier workspace</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <nav class="rail" aria-label="Sections">
+    <div class="brand"><img src="icons/icon48.png" width="28" height="28" alt=""><span>Company Copier</span></div>
+    <a href="#overview" data-page="overview">Overview</a>
+    <a href="#companies" data-page="companies">Companies <span id="navCount" class="badge"></span></a>
+    <a href="#country" data-page="country">Country search</a>
+    <a href="#settings" data-page="settings">Settings</a>
+  </nav>
+
+  <div class="main">
+    <header id="now" class="now" data-s="idle" role="status" aria-live="polite">
+      <span class="pulse" aria-hidden="true"></span>
+      <div class="nowText"><strong id="nowTitle">Idle</strong><span id="nowMsg"></span></div>
+      <button id="nowStop" type="button" class="btn" hidden>Stop</button>
+    </header>
+
+    <main>
+      <!-- Overview -->
+      <section id="page-overview" class="page">
+        <h1>Overview</h1>
+        <p class="lede">Two routes. Each stop shows where it stands and what to run next.</p>
+        <div class="route" id="routeLinkedin"></div>
+        <div class="route" id="routeCountry"></div>
+      </section>
+
+      <!-- Companies -->
+      <section id="page-companies" class="page" hidden>
+        <h1>Companies</h1>
+        <div class="bar">
+          <input id="filter" type="search" placeholder="Filter by name or website" autocomplete="off">
+          <button id="onlyUnrelated" class="chip" type="button" aria-pressed="false">Websites that look wrong</button>
+          <span class="grow"></span>
+          <button id="selUnrelated" class="btn quiet" type="button">Select unrelated</button>
+          <button id="xlsx" class="btn" type="button">Export Excel</button>
+          <button id="copyAll" class="btn quiet" type="button">Copy all</button>
+        </div>
+        <div id="picked" class="bar picked" hidden>
+          <strong id="pickedCount"></strong>
+          <button id="research" class="btn primary" type="button">Re-search websites with DeepSeek</button>
+          <button id="clearPick" class="btn quiet" type="button">Clear selection</button>
+          <span id="pickedNote" class="note"></span>
+        </div>
+        <div class="tableWrap">
+          <table id="table">
+            <thead>
+              <tr>
+                <th class="chk"><input id="allBox" type="checkbox" aria-label="Select all shown"></th>
+                <th>Company</th><th>Website</th><th>Careers page</th><th>Fitting job</th><th>Checked by</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <p id="empty" class="empty" hidden>No companies saved yet. Open a LinkedIn company search and press Start copying in the popup.</p>
+        </div>
+        <p id="tableNote" class="note"></p>
+        <div class="bar danger-zone">
+          <button id="resetJobs" class="btn quiet" type="button">Reset job results</button>
+          <button id="clear" class="btn quiet danger" type="button">Clear saved companies</button>
+        </div>
+      </section>
+
+      <!-- Country search -->
+      <section id="page-country" class="page" hidden>
+        <h1>Country search</h1>
+        <p class="lede">Searches the web country by country for remote Node, PHP, backend and full-stack jobs, then reads each saved link.</p>
+        <p id="serverState" class="serverState"></p>
+        <div class="meters">
+          <div class="meter"><div class="mHead"><span>Countries searched</span><strong id="mCountries"></strong></div><div class="track"><i id="barCountries"></i></div></div>
+          <div class="meter"><div class="mHead"><span>Links checked</span><strong id="mChecked"></strong></div><div class="track"><i id="barChecked"></i></div></div>
+        </div>
+        <div class="bar">
+          <button id="geoStart" class="btn primary" type="button">Start country search</button>
+          <button id="chkStart" class="btn" type="button">Check saved links</button>
+          <button id="geoExport" class="btn quiet" type="button">Export Excel</button>
+          <span id="geoNote" class="note"></span>
+        </div>
+        <p class="note" id="limits"></p>
+        <h2>Matching jobs</h2>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Country</th><th>Job</th><th>Remote scope</th><th>Fit</th><th>Stack</th></tr></thead>
+            <tbody id="matchRows"></tbody>
+          </table>
+          <p id="matchEmpty" class="empty" hidden>No matching jobs yet.</p>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="page-settings" class="page" hidden>
+        <h1>Settings</h1>
+        <div class="setting">
+          <h2>DeepSeek</h2>
+          <p class="note">Chooses the right website, finds careers pages, and judges each job. Sends company names, search result titles and job text to DeepSeek.</p>
+          <div class="field"><input id="dsKey" type="password" placeholder="Paste your API key" autocomplete="off" spellcheck="false" aria-label="DeepSeek API key"><button id="dsSave" class="btn" type="button">Save key</button><button id="dsTest" class="btn quiet" type="button">Test key</button><button id="dsRemove" class="btn quiet" type="button">Remove key</button></div>
+          <p id="dsStatus" class="note" role="status"></p>
+        </div>
+        <div class="setting">
+          <h2>Local server</h2>
+          <p class="note">The key from <code>server/.env</code> (LEAD_KEY). Start <code>server/start.bat</code> before using the country search.</p>
+          <div class="field"><input id="leadKey" type="password" placeholder="Paste the server key" autocomplete="off" spellcheck="false" aria-label="Server key"><button id="leadSave" class="btn" type="button">Save key</button></div>
+          <p id="leadStatus" class="note" role="status"></p>
+        </div>
+        <div class="setting">
+          <h2>Pacing</h2>
+          <p class="note">LinkedIn: 10 result pages a day, 10 to 30 seconds apart. Country search: 150 searches a day. Link checks: 300 a day. Skipped countries: Bangladesh, India, Pakistan, Afghanistan.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="shared.js"></script>
+  <script src="xlsx.js"></script>
+  <script src="serverClient.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

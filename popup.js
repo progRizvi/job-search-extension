@@ -1,106 +1,63 @@
 const $ = (id) => document.getElementById(id);
-
 const isSearch = (url) => /^https:\/\/www\.linkedin\.com\/search\/results\//.test(url || '');
 
-function setStatus(msg, isErr) {
-  $('status').textContent = msg;
-  $('status').className = isErr ? 'err' : '';
+function hint(msg, isErr) {
+  $('hint').textContent = msg;
+  $('hint').className = isErr ? 'hint err' : 'hint';
 }
 
-// Ten segments, one per allowed page: used, the one being collected, or free.
-function buildSegments() {
-  const segs = $('segs');
-  for (let i = 0; i < DAILY_LIMIT; i++) segs.appendChild(document.createElement('span'));
+for (let i = 0; i < DAILY_LIMIT; i++) $('segs').appendChild(document.createElement('span'));
+
+async function getLastUrl() {
+  const { lastUrl, visited = {} } = await chrome.storage.local.get(['lastUrl', 'visited']);
+  return lastUrl || Object.keys(visited).pop() || '';
 }
+
+const RUNS = [
+  ['auto', 'Copying LinkedIn pages'], ['sites', 'Finding websites'], ['jobs', 'Finding backend jobs'],
+  ['collector', 'Searching countries'], ['checker', 'Checking saved links'],
+];
 
 async function render() {
   const { count, companies } = await load();
-  const { auto = {} } = await chrome.storage.local.get('auto');
-  const running = !!auto.running;
-  const { sites = {} } = await chrome.storage.local.get('sites');
-  const sitesRunning = !!sites.running;
-  const { jobs = {} } = await chrome.storage.local.get('jobs');
-  const jobsRunning = !!jobs.running;
-  const { collector: coll = {}, checker: chk0 = {} } = await chrome.storage.local.get(['collector', 'checker']);
-  const collRunning = !!(coll.running || chk0.running);
+  const st = await chrome.storage.local.get(['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting']);
+  const auto = st.auto || {};
+  const active = RUNS.find(([k]) => st[k] && st[k].running);
   const limitHit = count >= DAILY_LIMIT;
 
   $('count').textContent = count;
   $('segs').setAttribute('aria-label', `${count} of ${DAILY_LIMIT} pages used today`);
-  [...$('segs').children].forEach((el, i) => {
-    el.className = i < count ? 'used' : running && i === count ? 'now' : '';
-  });
+  [...$('segs').children].forEach((el, i) => { el.className = i < count ? 'used' : auto.running && i === count ? 'now' : ''; });
   const n = Object.keys(companies).length;
   $('saved').textContent = `${n} ${n === 1 ? 'company' : 'companies'} saved`;
 
+  // Same wording as the workspace's Now strip.
+  const now = $('now');
+  if (st.waiting) {
+    now.dataset.s = 'waiting';
+    $('nowTitle').textContent = 'Waiting for you';
+    $('nowMsg').textContent = `${st.waiting.what} Solve it in the separate window and the run continues.`;
+  } else if (active) {
+    const [key, title] = active;
+    const rec = key === 'sites' || key === 'jobs' ? auto : st[key];
+    now.dataset.s = 'running';
+    $('nowTitle').textContent = title;
+    $('nowMsg').textContent = (rec.message || '') + (rec.nextAt ? ` Next in ${Math.max(0, Math.round((rec.nextAt - Date.now()) / 1000))}s.` : '');
+  } else {
+    const last = [auto.message, st.collector?.message, st.checker?.message].filter(Boolean).pop() || '';
+    now.dataset.s = /^Stopped:/.test(last) ? 'error' : 'idle';
+    $('nowTitle').textContent = limitHit ? 'Done for today' : 'Ready';
+    $('nowMsg').textContent = last;
+  }
+
   const main = $('main');
-  main.dataset.mode = running ? 'stop' : 'start';
-  main.textContent = running ? 'Stop copying' : 'Start copying';
-  main.disabled = !running && limitHit;
+  main.dataset.mode = auto.running ? 'stop' : 'start';
+  main.textContent = auto.running ? 'Stop copying' : 'Start copying';
+  main.disabled = !auto.running && (limitHit || !!active);
 
   const lastUrl = await getLastUrl();
-  $('resume').hidden = !lastUrl || running || limitHit;
-  $('viewUrl').style.marginLeft = 'auto';
-  $('urlOpen').disabled = $('urlCopy').disabled = !lastUrl;
-  $('urlText').textContent = lastUrl || 'No page saved yet. Collect a page and it will appear here.';
-
-  main.disabled = main.disabled || sitesRunning || jobsRunning || collRunning;
-
-  const missing = Object.values(companies).filter((c) => !c.website && !c.siteChecked).length;
-  const sitesBtn = $('sites');
-  sitesBtn.textContent = sitesRunning
-    ? 'Stop finding websites'
-    : missing
-      ? `Find websites on Google (${missing} missing)`
-      : 'Find websites on Google';
-  sitesBtn.disabled = running || jobsRunning || collRunning || (!sitesRunning && !missing);
-
-  const { deepseekKey: dsKey } = await chrome.storage.local.get('deepseekKey');
-  const unverified = Object.values(companies).filter((c) => c.website && c.websiteBy !== 'DeepSeek' && c.websiteBy !== 'LinkedIn').length;
-  const recheckBtn = $('recheck');
-  recheckBtn.hidden = !dsKey || !unverified;
-  recheckBtn.textContent = `Re-check websites with DeepSeek (${unverified})`;
-  recheckBtn.disabled = running || sitesRunning || jobsRunning || collRunning;
-
-  const resetBtn = $('resetJobs');
-  const hasJobs = Object.values(companies).some((c) => c.jobsChecked || c.careersUrl || c.backendJobUrl);
-  resetBtn.hidden = !hasJobs;
-  resetBtn.disabled = running || sitesRunning || jobsRunning;
-  if (!resetTimer) resetBtn.textContent = 'Reset job results';
-
-  const toCheck = Object.values(companies).filter((c) => c.website && !c.jobsChecked).length;
-  const jobsBtn = $('jobs');
-  jobsBtn.textContent = jobsRunning
-    ? 'Stop checking jobs'
-    : toCheck
-      ? `Find backend jobs (${toCheck} sites)`
-      : 'Find backend jobs';
-  jobsBtn.disabled = running || sitesRunning || collRunning || (!jobsRunning && !toCheck);
-
-  const busy = running || sitesRunning || jobsRunning || collRunning;
-  const state = $('state');
-  state.dataset.s = busy ? 'running' : limitHit ? 'done' : 'ready';
-  state.textContent = running ? 'Running' : sitesRunning ? 'Finding sites' : collRunning ? 'Country search' : jobsRunning ? 'Checking jobs' : limitHit ? 'Done for today' : 'Ready';
-
-  // Live message from the background run, with a countdown to the next page.
-  const { waiting } = await chrome.storage.local.get('waiting');
-  if (waiting) {
-    setStatus(`Waiting for you: ${waiting.what} Solve it in the separate window and the run continues.`, true);
-  } else if (busy || auto.message) {
-    let msg = auto.message || '';
-    if (busy && auto.nextAt) {
-      msg += ` Next page in ${Math.max(0, Math.round((auto.nextAt - Date.now()) / 1000))}s.`;
-    }
-    setStatus(msg, !busy && /^Stopped:/.test(auto.message || ''));
-  } else if (limitHit) {
-    setStatus('Daily limit reached. You can start again after midnight.');
-  }
-}
-
-// The saved resume pointer, or, for data collected before it existed, the newest visited page.
-async function getLastUrl() {
-  const { lastUrl, visited = {} } = await chrome.storage.local.get(['lastUrl', 'visited']);
-  return lastUrl || Object.keys(visited).pop() || '';
+  $('resume').disabled = !lastUrl || !!active || limitHit;
+  $('scrape').disabled = !!active;
 }
 
 async function activeTab() {
@@ -115,406 +72,53 @@ $('main').addEventListener('click', async () => {
     return render();
   }
   const tab = await activeTab();
-  if (!isSearch(tab?.url)) {
-    return setStatus('Open a LinkedIn company search (Search → Companies), then start.', true);
-  }
-  setStatus('Opening a separate window…');
+  if (!isSearch(tab?.url)) return hint('Open a LinkedIn company search (Search, then Companies), then start.', true);
+  hint('Opening a separate window…');
   const res = await chrome.runtime.sendMessage({ type: 'start', url: tab.url });
-  if (res && !res.ok) setStatus(`Could not start: ${res.error}`, true);
+  if (res && !res.ok) hint(`Could not start: ${res.error}`, true);
   render();
 });
 
 $('resume').addEventListener('click', async () => {
   const lastUrl = await getLastUrl();
   if (!lastUrl) return;
-  setStatus('Opening your last page in a separate window…');
+  hint('Opening your last page in a separate window…');
   const res = await chrome.runtime.sendMessage({ type: 'start', url: lastUrl });
-  if (res && !res.ok) setStatus(`Could not start: ${res.error}`, true);
-  render();
-});
-
-$('viewUrl').addEventListener('click', () => {
-  const box = $('urlBox');
-  box.hidden = !box.hidden;
-  $('viewUrl').setAttribute('aria-expanded', String(!box.hidden));
-  $('viewUrl').textContent = box.hidden ? 'View URL' : 'Hide URL';
-});
-
-$('urlOpen').addEventListener('click', async () => {
-  const lastUrl = await getLastUrl();
-  if (lastUrl) chrome.tabs.create({ url: lastUrl });
-});
-
-$('urlCopy').addEventListener('click', async () => {
-  const lastUrl = await getLastUrl();
-  if (!lastUrl) return;
-  await navigator.clipboard.writeText(lastUrl);
-  setStatus('Last page link copied.');
-});
-
-$('sites').addEventListener('click', async () => {
-  const { sites = {} } = await chrome.storage.local.get('sites');
-  if (sites.running) {
-    await chrome.runtime.sendMessage({ type: 'stopSites' });
-    return render();
-  }
-  setStatus('Opening Google in a separate window…');
-  const res = await chrome.runtime.sendMessage({ type: 'findSites' });
-  if (res && !res.ok) setStatus(`Could not start: ${res.error}`, true);
-  render();
-});
-
-$('recheck').addEventListener('click', async () => {
-  setStatus('Opening Google in a separate window…');
-  const res = await chrome.runtime.sendMessage({ type: 'findSites', recheck: true });
-  if (res && !res.ok) setStatus(`Could not start: ${res.error}`, true);
-  render();
-});
-
-let resetTimer = null;
-$('resetJobs').addEventListener('click', async () => {
-  if (!resetTimer) {
-    $('resetJobs').textContent = 'Click again to erase all job results';
-    resetTimer = setTimeout(() => { resetTimer = null; render(); }, 4000);
-    return;
-  }
-  clearTimeout(resetTimer);
-  resetTimer = null;
-  const { companies = {} } = await chrome.storage.local.get('companies');
-  for (const c of Object.values(companies)) {
-    Object.assign(c, {
-      jobsChecked: false, careersUrl: '', openings: '', backendJobTitle: '', backendJobUrl: '',
-      checkedBy: '', jobFit: '', jobLocation: '', jobWorkType: '', jobExperience: '', jobStack: '',
-    });
-  }
-  await chrome.storage.local.set({ companies });
-  setStatus('Job results erased. Websites are kept. Run Find backend jobs again.');
-  render();
-});
-$('jobs').addEventListener('click', async () => {
-  const { jobs = {} } = await chrome.storage.local.get('jobs');
-  if (jobs.running) {
-    await chrome.runtime.sendMessage({ type: 'stopJobs' });
-    return render();
-  }
-  setStatus('Opening company sites in a separate window…');
-  const res = await chrome.runtime.sendMessage({ type: 'findJobs' });
-  if (res && !res.ok) setStatus(`Could not start: ${res.error}`, true);
+  if (res && !res.ok) hint(`Could not start: ${res.error}`, true);
   render();
 });
 
 $('scrape').addEventListener('click', async () => {
   try {
     const tab = await activeTab();
-    if (!isSearch(tab?.url)) {
-      return setStatus('Open a LinkedIn company search (Search → Companies), then copy.', true);
-    }
+    if (!isSearch(tab?.url)) return hint('Open a LinkedIn company search, then copy.', true);
     const key = normalizePageUrl(tab.url);
     const { visited, count } = await load();
-
-    if (visited[key]) return setStatus(`You already copied this page on ${visited[key]}.`, true);
-    if (count >= DAILY_LIMIT) return setStatus('Daily limit reached. Try again after midnight.', true);
-
+    if (visited[key]) return hint(`You already copied this page on ${visited[key]}.`, true);
+    if (count >= DAILY_LIMIT) return hint('Daily limit reached. Try again after midnight.', true);
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scrapePage });
-    if (!result || !result.length) {
-      return setStatus('No companies found. Scroll down so results load, then try again.', true);
-    }
-
+    if (!result || !result.length) return hint('No companies found. Scroll down so results load, then try again.', true);
     const { added } = await savePage(key, result);
     await navigator.clipboard.writeText(toTSV(Object.fromEntries(result.map((c) => [c.linkedinUrl, c]))));
-    setStatus(`Copied ${result.length} companies (${added} new). Paste into Excel or Sheets.`);
+    hint(`Copied ${result.length} companies (${added} new). Paste into Excel or Sheets.`);
   } catch (e) {
-    setStatus(`Could not copy: ${e.message}`, true);
+    hint(`Could not copy: ${e.message}`, true);
   }
   render();
 });
 
-$('copyAll').addEventListener('click', async () => {
-  const { companies } = await load();
-  const n = Object.keys(companies).length;
-  if (!n) return setStatus('Nothing saved yet. Copy a page first.', true);
-  await navigator.clipboard.writeText(toTSV(companies));
-  setStatus(`Copied ${n} companies.`);
-});
-
-$('xlsx').addEventListener('click', async () => {
-  const { companies } = await load();
-  if (!Object.keys(companies).length) return setStatus('Nothing saved yet. Copy a page first.', true);
-  const blob = new Blob([companiesToXlsx(companies)], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `linkedin-companies-${today()}.xlsx`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setStatus('Excel file saved to your Downloads folder.');
-});
-
-// Two-step clear instead of a confirm dialog.
-let clearTimer = null;
-function disarmClear() {
-  clearTimeout(clearTimer);
-  clearTimer = null;
-  $('clear').textContent = 'Clear saved companies';
-}
-$('clear').addEventListener('click', async () => {
-  if (!clearTimer) {
-    $('clear').textContent = 'Click again to delete all saved companies';
-    clearTimer = setTimeout(disarmClear, 4000);
-    return;
-  }
-  disarmClear();
-  await chrome.storage.local.set({ companies: {} });
-  setStatus("Saved companies cleared. Today's page count is unchanged.");
-  render();
-});
-
-let dsNotice = '';
-
-async function renderDeepseek() {
-  const { deepseekKey, deepseekError, dsStats } = await chrome.storage.local.get(['deepseekKey', 'deepseekError', 'dsStats']);
-  const t = new Date();
-  const day = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
-  const used = dsStats && dsStats.day === day ? dsStats.count : 0;
-  const el = $('dsStatus');
-  el.className = deepseekError ? 'err' : '';
-  el.textContent = dsNotice
-    ? dsNotice
-    : deepseekError
-    ? deepseekError
-    : deepseekKey
-      ? `Key saved. DeepSeek is on. ${used} ${used === 1 ? 'request' : 'requests'} today.`
-      : 'Off. Using the built-in matching.';
-  $('dsKey').placeholder = deepseekKey ? 'Key saved (paste a new one to replace)' : 'Paste your API key';
-}
-
-$('dsSave').addEventListener('click', async () => {
-  const key = $('dsKey').value.trim();
-  if (!key) return;
-  await chrome.storage.local.set({ deepseekKey: key });
-  await chrome.storage.local.remove('deepseekError');
-  $('dsKey').value = '';
-  renderDeepseek();
-});
-
-$('dsTest').addEventListener('click', async () => {
-  const el = $('dsStatus');
-  el.className = '';
-  el.textContent = 'Testing…';
-  const res = await chrome.runtime.sendMessage({ type: 'testDeepseek' });
-  if (res && res.ok) {
-    dsNotice = 'The key works. DeepSeek answered.';
-    setTimeout(() => { dsNotice = ''; renderDeepseek(); }, 5000);
-    renderDeepseek();
+$('open').addEventListener('click', async () => {
+  const url = chrome.runtime.getURL('app.html');
+  const [existing] = await chrome.tabs.query({ url });
+  if (existing) {
+    await chrome.tabs.update(existing.id, { active: true });
+    await chrome.windows.update(existing.windowId, { focused: true });
   } else {
-    const { deepseekKey, deepseekError } = await chrome.storage.local.get(['deepseekKey', 'deepseekError']);
-    el.className = 'err';
-    el.textContent = !deepseekKey ? 'Save a key first.' : deepseekError || 'No answer from DeepSeek. Check your connection.';
+    await chrome.tabs.create({ url });
   }
+  window.close();
 });
 
-$('dsRemove').addEventListener('click', async () => {
-  await chrome.storage.local.remove(['deepseekKey', 'deepseekError']);
-  renderDeepseek();
-});
-
-// ---- Review websites: pick companies whose saved domain looks wrong and re-search them with DeepSeek ----
-const picked = new Set();
-
-async function renderReview() {
-  if (!$('review').open) return;
-  const { companies = {} } = await load();
-  const { deepseekKey } = await chrome.storage.local.get('deepseekKey');
-  const q = $('reviewFilter').value.trim().toLowerCase();
-  const list = $('reviewList');
-  const scroll = list.scrollTop;
-  list.textContent = '';
-  const rows = Object.values(companies)
-    .map((c) => ({ c, bad: looksUnrelated(c.name, c.website) }))
-    .filter(({ c }) => !q || `${c.name} ${c.website}`.toLowerCase().includes(q))
-    .sort((a, b) => Number(b.bad) - Number(a.bad) || a.c.name.localeCompare(b.c.name))
-    .slice(0, 300);
-  for (const { c, bad } of rows) {
-    const row = document.createElement('label');
-    row.className = 'reviewRow';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.checked = picked.has(c.linkedinUrl);
-    box.addEventListener('change', () => {
-      box.checked ? picked.add(c.linkedinUrl) : picked.delete(c.linkedinUrl);
-      syncResearchButton();
-    });
-    const text = document.createElement('span');
-    const nm = document.createElement('div');
-    nm.className = 'nm';
-    nm.textContent = c.name;
-    const dm = document.createElement('div');
-    dm.className = 'dm';
-    let host = 'no website';
-    try { if (c.website) host = new URL(c.website).hostname.replace(/^www\./, ''); } catch { host = c.website; }
-    dm.textContent = host;
-    if (bad) {
-      const f = document.createElement('span');
-      f.className = 'flag';
-      f.textContent = '  looks unrelated';
-      dm.appendChild(f);
-    }
-    text.append(nm, dm);
-    row.append(box, text);
-    list.appendChild(row);
-  }
-  if (!rows.length) list.textContent = 'No saved companies match.';
-  list.scrollTop = scroll;
-  syncResearchButton();
-}
-
-async function syncResearchButton() {
-  const { deepseekKey, auto = {}, sites = {}, jobs = {} } = await chrome.storage.local.get(['deepseekKey', 'auto', 'sites', 'jobs']);
-  const busy = !!(auto.running || sites.running || jobs.running);
-  const btn = $('researchSel');
-  btn.disabled = !deepseekKey || picked.size === 0 || busy;
-  btn.textContent = sites.running
-    ? 'Stop re-searching'
-    : picked.size ? `Re-search ${picked.size} selected with DeepSeek` : 'Re-search selected with DeepSeek';
-  if (sites.running) btn.disabled = false; // lets the user stop it from here
-  $('reviewNote').className = 'hint';
-  // Progress shows here, next to the button: the main status line is off-screen when this list is scrolled.
-  $('reviewNote').textContent = !deepseekKey
-    ? 'Save a DeepSeek key below to use this.'
-    : sites.running
-      ? auto.message || 'Searching…'
-      : busy
-        ? 'Another run is active. Stop it or wait for it to finish, then re-search.'
-      : auto.message && /^(Stopped|Done)/.test(auto.message)
-        ? `Last run: ${auto.message}`
-        : picked.size === 0
-          ? 'Tick at least one company.'
-          : '';
-  if (!sites.running && /^Stopped/.test(auto.message || '')) $('reviewNote').className = 'hint err';
-}
-
-$('review').addEventListener('toggle', renderReview);
-$('reviewFilter').addEventListener('input', renderReview);
-$('selNone').addEventListener('click', () => { picked.clear(); renderReview(); });
-$('selUnrelated').addEventListener('click', async () => {
-  const { companies = {} } = await load();
-  Object.values(companies).forEach((c) => { if (looksUnrelated(c.name, c.website)) picked.add(c.linkedinUrl); });
-  renderReview();
-});
-$('researchSel').addEventListener('click', async () => {
-  const { sites = {} } = await chrome.storage.local.get('sites');
-  if (sites.running) {
-    await chrome.runtime.sendMessage({ type: 'stopSites' });
-    return syncResearchButton();
-  }
-  const ids = [...picked];
-  $('reviewNote').textContent = 'Starting… a separate window will open.';
-  setStatus(`Re-searching ${ids.length} websites…`);
-  const res = await chrome.runtime.sendMessage({ type: 'findSites', recheck: true, ids });
-  if (res && !res.ok) {
-    $('reviewNote').textContent = `Could not start: ${res.error}`;
-    $('reviewNote').className = 'hint err';
-    return;
-  }
-  picked.clear();
-  renderReview();
-  render();
-});
-
-// ---- Country job search (local server) ----
-async function renderGeo() {
-  const st = await chrome.storage.local.get(['collector', 'checker', 'leadKey', 'auto', 'sites', 'jobs']);
-  const coll = st.collector || {};
-  const chk = st.checker || {};
-  const otherBusy = !!(st.auto?.running || st.sites?.running || st.jobs?.running);
-  const btn = $('geoMain');
-  btn.textContent = coll.running ? 'Stop country search' : 'Start country search';
-  btn.disabled = !st.leadKey || chk.running || (!coll.running && otherBusy);
-  const cb = $('chkMain');
-  cb.textContent = chk.running ? 'Stop checking links' : 'Check saved links for jobs';
-  cb.disabled = !st.leadKey || coll.running || (!chk.running && otherBusy);
-  let cnote = chk.message || '';
-  if (chk.running && chk.nextAt) cnote += ` Next link in ${Math.max(0, Math.round((chk.nextAt - Date.now()) / 1000))}s.`;
-  $('chkNote').textContent = cnote;
-  $('chkNote').className = !chk.running && /^Stopped/.test(chk.message || '') ? 'hint err' : 'hint';
-  let note = coll.message || '';
-  if (coll.running && coll.nextAt) note += ` Next search in ${Math.max(0, Math.round((coll.nextAt - Date.now()) / 1000))}s.`;
-  $('geoNote').textContent = coll.running && coll.country ? `${coll.country}: ${note}` : note;
-  const { waiting } = await chrome.storage.local.get('waiting');
-  if (waiting) $('geoNote').textContent = `Waiting for you: ${waiting.what} Solve it in the separate window.`;
-  $('geoNote').className = !coll.running && /^Stopped/.test(coll.message || '') ? 'hint err' : 'hint';
-  if (!$('geo').open) return;
-  try {
-    const s = await serverFetch('/stats');
-    $('geoServer').textContent = 'Server connected.';
-    $('geoServer').className = 'hint';
-    $('geoProgress').textContent = `${s.countriesDone} of ${s.countriesTotal} countries searched, ${s.urls} links saved.`;
-  } catch (e) {
-    $('geoServer').textContent = e instanceof ServerDown ? `${e.message} Start server/start.bat.` : e.message;
-    $('geoServer').className = 'hint err';
-    $('geoProgress').textContent = '';
-  }
-}
-$('geo').addEventListener('toggle', renderGeo);
-$('geoSaveKey').addEventListener('click', async () => {
-  const key = $('geoKey').value.trim();
-  if (!key) return;
-  await chrome.storage.local.set({ leadKey: key });
-  $('geoKey').value = '';
-  $('geoKey').placeholder = 'Key saved. Paste a new one to replace it.';
-  renderGeo();
-});
-$('geoMain').addEventListener('click', async () => {
-  const { collector = {} } = await chrome.storage.local.get('collector');
-  if (collector.running) {
-    await chrome.runtime.sendMessage({ type: 'stopCollector' });
-    return renderGeo();
-  }
-  $('geoNote').textContent = 'Starting… a separate window will open.';
-  const res = await chrome.runtime.sendMessage({ type: 'startCollector' });
-  if (res && !res.ok) { $('geoNote').textContent = `Could not start: ${res.error}`; $('geoNote').className = 'hint err'; }
-  renderGeo();
-});
-$('geoExport').addEventListener('click', async () => {
-  try {
-    const { rows } = await serverFetch('/export');
-    if (!rows.length) { $('chkNote').textContent = 'Nothing to export yet. Run the country search first.'; return; }
-    const header = ['Country', 'URL', 'Kind', 'Status', 'Careers/List Page', 'Openings', 'Job Title', 'Job URL', 'Work Type', 'Remote Scope', 'Fit', 'Stack'];
-    const data = [header, ...rows.map((r) => [r.country, r.url, r.kind, r.status, r.careersUrl, r.openings, r.jobTitle, r.jobUrl, r.workType, r.remoteScope, r.fit, r.stack])];
-    const blob = new Blob([buildXlsx(data)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `country-job-leads-${today()}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    $('chkNote').textContent = `Saved ${rows.length} rows to your Downloads folder.`;
-  } catch (e) {
-    $('chkNote').textContent = e.message;
-    $('chkNote').className = 'hint err';
-  }
-});
-$('chkMain').addEventListener('click', async () => {
-  const { checker = {} } = await chrome.storage.local.get('checker');
-  if (checker.running) {
-    await chrome.runtime.sendMessage({ type: 'stopChecker' });
-    return renderGeo();
-  }
-  $('chkNote').textContent = 'Starting… a separate window will open.';
-  const res = await chrome.runtime.sendMessage({ type: 'startChecker' });
-  if (res && !res.ok) { $('chkNote').textContent = `Could not start: ${res.error}`; $('chkNote').className = 'hint err'; }
-  renderGeo();
-});
-setInterval(renderGeo, 3000);
-renderGeo();
-
-buildSegments();
-renderDeepseek();
-chrome.storage.onChanged.addListener((changes) => {
-  render();
-  renderDeepseek();
-  if ($('review').open) (changes.companies ? renderReview() : syncResearchButton());
-});
-setInterval(render, 1000); // countdown while a run is active
+chrome.storage.onChanged.addListener(render);
+setInterval(render, 1000);
 render();
