@@ -8,15 +8,26 @@ export function checkerRoutes(pool) {
   const r = Router();
 
   // The oldest url that has not been checked, with the countries whose searches found it.
+  const shapeItem = async (row) => {
+    const [cs] = await pool.query(
+      'SELECT DISTINCT c.name FROM url_countries uc JOIN countries c ON c.code = uc.country_code WHERE uc.url_id = ? ORDER BY c.name',
+      [row.id]
+    );
+    return { id: row.id, url: row.url, countries: cs.map((c) => c.name) };
+  };
+
   r.get('/checker/next', async (req, res, next) => {
     try {
       const [rows] = await pool.query("SELECT id, url FROM urls WHERE status = 'new' ORDER BY (first_query = 'manual') DESC, id LIMIT 1");
-      if (!rows.length) return res.json({ done: true });
-      const [cs] = await pool.query(
-        'SELECT DISTINCT c.name FROM url_countries uc JOIN countries c ON c.code = uc.country_code WHERE uc.url_id = ? ORDER BY c.name',
-        [rows[0].id]
-      );
-      res.json({ id: rows[0].id, url: rows[0].url, countries: cs.map((c) => c.name) });
+      res.json(rows.length ? await shapeItem(rows[0]) : { done: true });
+    } catch (e) { next(e); }
+  });
+
+  // One chosen link, whatever its status: for the "Check now" button.
+  r.get('/checker/item', async (req, res, next) => {
+    try {
+      const [rows] = await pool.query('SELECT id, url FROM urls WHERE id = ?', [Number(req.query.id) || 0]);
+      res.json(rows.length ? await shapeItem(rows[0]) : { done: true });
     } catch (e) { next(e); }
   });
 

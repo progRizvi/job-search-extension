@@ -123,7 +123,11 @@ function renderNow() {
   now.dataset.s = /^Stopped:/.test(last) ? 'error' : 'idle';
   const waiting = server.stats ? server.stats.waiting : 0;
   $('nowTitle').textContent = 'Idle';
-  $('nowMsg').textContent = waiting ? `${waiting} ${waiting === 1 ? 'link is' : 'links are'} queued to check. Nothing is running. Press Check saved links on the Country search page.` : last;
+  // Keep the last result visible, and add what is still queued. A summary that says everything is checked would be wrong then.
+  const summary = waiting && /^Done: (every saved link|nothing to check)/.test(last) ? '' : last;
+  $('nowMsg').textContent = waiting
+    ? `${summary} ${waiting} ${waiting === 1 ? 'link is' : 'links are'} queued. Nothing is running. Press Check saved links.`.trim()
+    : last;
 }
 
 // ---------- overview: two routes ----------
@@ -478,7 +482,7 @@ async function saveEdit(l, input, msg) {
 
 function renderLinks() {
   const active = activeId();
-  const sig = JSON.stringify([links.rows, links.total, active, links.editing]);
+  const sig = JSON.stringify([links.rows, links.total, active, links.editing, !!activeRun(), !!S.deepseekKey]);
   const body = $('linkRows');
   $('linksTotal').textContent = links.total ? `(${links.total})` : '';
   $('linksMore').hidden = links.rows.filter((r) => !r.pinned).length >= links.total;
@@ -517,9 +521,9 @@ function renderLinks() {
       el('td', { title: l.status === 'new' && l.jobs ? 'From the last check. They are replaced when the re-check finishes. Press Check saved links to run it.' : '' }, l.jobs ? String(l.jobs) : '–'),
       el('td', { class: 'acts' },
         el('button', { class: 'btn quiet mini', type: 'button', onclick: () => { links.editing = l.id; renderLinks(); } }, 'Edit'),
-        l.status !== 'new' && !isActive
-          ? el('button', { class: 'btn quiet mini', type: 'button', onclick: async () => { try { await serverFetch('/checker/requeue', { ids: [l.id] }); toast('It will be checked again.'); loadLinks(); } catch (e) { toast(e.message); } } }, 'Check again')
-          : '',
+        isActive
+          ? ''
+          : el('button', { class: 'btn quiet mini', type: 'button', disabled: !!activeRun() || !S.deepseekKey, title: S.deepseekKey ? 'Check only this link now' : 'Save a DeepSeek key in Settings first', onclick: () => send('startChecker', { id: l.id }) }, 'Check now'),
         remove));
     if (isActive) activeRow = row;
     body.append(row);

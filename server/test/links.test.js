@@ -73,3 +73,13 @@ test('the link being checked can be pinned to the top of the list', async () => 
   assert.equal(res.rows[0].id, first.id);
   assert.equal(res.rows[0].pinned, true);
 });
+
+test('one link can be fetched by id for a single check, even when it is already checked', async () => {
+  const a = await call('/collector/next');
+  await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://one.com/jobs', 'https://two.com/jobs'] });
+  const first = await call('/checker/next');
+  await call('/checker/result', { id: first.id, url: first.url, status: 'checked', kind: 'board' });
+  const item = await call(`/checker/item?id=${first.id}`);
+  assert.deepEqual([item.id, item.url, item.countries], [first.id, first.url, [a.country.name]]);
+  assert.deepEqual(await call('/checker/item?id=999999'), { done: true }); // a removed link
+});

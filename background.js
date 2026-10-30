@@ -691,7 +691,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     Promise.all([getAuto(), getSites(), getJobs(), getCollector(), getChecker()]).then(async ([a, st, j, c, k]) => {
       if (a.running || st.running || j.running || c.running || k.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
       await setChecker({ running: true, message: 'Starting…' });
-      checkLoop();
+      checkLoop(Number.isInteger(msg.id) ? msg.id : null);
       sendResponse({ ok: true });
     });
     return true;

@@ -220,7 +220,8 @@ async function checkUrl(tabId, item) {
   };
 }
 
-async function checkLoop() {
+// onlyId: check just that one link (the "Check now" button) instead of working through the queue.
+async function checkLoop(onlyId = null) {
   let winId;
   try {
     if (!(await chrome.storage.local.get('deepseekKey')).deepseekKey) {
@@ -237,7 +238,8 @@ async function checkLoop() {
       const used = d && d.date === today() ? d.count : 0;
       if (used >= CHECK_DAILY_LIMIT) return finishChecker(`Done for today: ${CHECK_DAILY_LIMIT} links checked. ${matches} matching jobs found.`, winId);
 
-      const next = await serverFetch('/checker/next');
+      const next = await serverFetch(onlyId ? `/checker/item?id=${onlyId}` : '/checker/next');
+      if (next.done && onlyId) return finishChecker('Done: that link no longer exists.', winId);
       if (next.done) {
         return finishChecker(
           done === 0
@@ -256,6 +258,7 @@ async function checkLoop() {
       matches += found;
       done++;
       await setChecker({ message: `${new URL(next.url).hostname}: ${out.status === 'unreachable' ? 'could not read the page' : found ? `${found} matching ${found === 1 ? 'job' : 'jobs'} found` : 'no matching job'}. ${done} checked, ${matches} matches.`, currentId: null });
+      if (onlyId) return finishChecker(`Done: ${hostOf(next.url)} checked. ${matches} matching ${matches === 1 ? 'job' : 'jobs'} found.`, winId);
       if (!(await checkerPause(Math.round(rnd(5, 12))))) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
     }
   } catch (e) {
