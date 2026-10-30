@@ -238,7 +238,7 @@ async function analyzeJobsPage() {
   const SENIOR = /\b(senior|sr\.?|lead)\b/i;
   const BACKEND_TITLE = /(back[- ]?end|server[- ]?side|full[- ]?stack|node(\.?js)?|php|laravel|java ?script|js) (software )?(engineer|developer)/i;
   const NAV = /^(careers?|jobs?|apply|apply now|view all|see all|all jobs|open positions|learn more|benefits|culture|about|home|contact|life at.*|our team)$/i;
-  const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|\/job-listing\/|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
+  const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|\/job-listing\/|\/remote-jobs\/[^/]+-\d{5,}|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
 
   // The text of the card around a job link (company, place, tags), so a list can be judged without opening each job.
   const cardText = (a) => {
@@ -260,7 +260,7 @@ async function analyzeJobsPage() {
   // Pages that list jobs rather than being one ("java developer jobs in Remote", search results, reviews...).
   const SEARCHLIKE = /SRCH_|[?&](q|query|keywords?|search)=|\/(search|browse|reviews|salaries|interviews)(\/|$)/i;
   // Addresses that are unmistakably one job. When the page has any, nothing weaker is accepted.
-  const STRONG_URL = /\/job-listing\/|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
+  const STRONG_URL = /\/job-listing\/|\/remote-jobs\/[^/]+-\d{5,}|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
   const here = location.href.split('#')[0];
 
   const jobs = new Map();
@@ -479,5 +479,10 @@ async function loadMoreJobs() {
   const next = [...document.querySelectorAll('a[href]')].find(
     (a) => a.rel === 'next' || a.getAttribute('aria-label') === 'Next' || /^(next|next page)$/i.test((a.innerText || '').trim())
   );
-  return next ? { next: next.href } : {};
+  if (next) return { next: next.href };
+  // No button and no next link: many boards load more jobs as you scroll. Scroll down and see whether the page grows.
+  const before = document.body.scrollHeight;
+  window.scrollTo(0, before);
+  await sleep(3500);
+  return document.body.scrollHeight > before ? { clicked: true } : {};
 }
