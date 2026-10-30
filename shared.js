@@ -237,8 +237,8 @@ async function analyzeJobsPage() {
   const SKIP = /\b(intern(ship)?|principal|staff|director|head of|vp|vice president|manager|architect|sales|support|recruit\w*|data scientist|machine learning|devops|sre|qa|test)\b/i;
   const SENIOR = /\b(senior|sr\.?|lead)\b/i;
   const BACKEND_TITLE = /(back[- ]?end|server[- ]?side|full[- ]?stack|node(\.?js)?|php|laravel|java ?script|js) (software )?(engineer|developer)/i;
-  const NAV = /^(careers?|jobs?|apply|apply now|view all|see all|all jobs|open positions|learn more|benefits|culture|about|home|contact|life at.*|our team)$/i;
-  const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|\/job-listing\/|\/remote-jobs\/[^/]+-\d{5,}|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
+  const NAV = /^(careers?|jobs?|apply|apply now|view all|see all|all jobs|open positions|learn more|benefits|culture|about|home|contact|life at.*|our team|post (a )?jobs?|find your plan|sign in|log in)$/i;
+  const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|\/job-listing\/|\/remote-jobs\/[^/]+-\d{5,}|weworkremotely\.com\/remote-jobs\/[^/]+|\/remote-jobs\/[^/]+\/[^/]+-\d{4,}|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
 
   // The text of the card around a job link (company, place, tags), so a list can be judged without opening each job.
   const cardText = (a) => {
@@ -260,7 +260,7 @@ async function analyzeJobsPage() {
   // Pages that list jobs rather than being one ("java developer jobs in Remote", search results, reviews...).
   const SEARCHLIKE = /SRCH_|[?&](q|query|keywords?|search)=|\/(search|browse|reviews|salaries|interviews)(\/|$)/i;
   // Addresses that are unmistakably one job. When the page has any, nothing weaker is accepted.
-  const STRONG_URL = /\/job-listing\/|\/remote-jobs\/[^/]+-\d{5,}|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
+  const STRONG_URL = /\/job-listing\/|\/remote-jobs\/[^/]+-\d{5,}|weworkremotely\.com\/remote-jobs\/[^/]+|\/remote-jobs\/[^/]+\/[^/]+-\d{4,}|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
   const here = location.href.split('#')[0];
 
   const jobs = new Map();
