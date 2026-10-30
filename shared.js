@@ -467,9 +467,11 @@ function remoteMatches(remoteScope, workType, countryName, countries = []) {
 // Injected into a job list: loads the next batch. Clicks a "Show more jobs" button, or returns the link to the next page.
 async function loadMoreJobs() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const btn = [...document.querySelectorAll('button, [role="button"]')].find(
+  const more = [...document.querySelectorAll('button, [role="button"]')].filter(
     (b) => /^(show|load|see|view) more( jobs| results)?$|^more jobs$/i.test((b.innerText || '').trim()) && !b.disabled && b.offsetParent
   );
+  // Several pages have a plain "Show more" elsewhere (filters, sections): prefer the one that says jobs.
+  const btn = more.find((b) => /job|result/i.test(b.innerText)) || more[0];
   if (btn) {
     btn.scrollIntoView({ block: 'center' });
     btn.click();
