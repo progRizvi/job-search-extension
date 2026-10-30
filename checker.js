@@ -2,6 +2,7 @@
 // and keeps the best job that is remote and open to someone in the searched country.
 const CHECK_DAILY_LIMIT = 300;
 const CHECK_FIT_RANK = { good: 2, maybe: 1, '': 0 };
+const CAPTCHA_PAGE = /captcha|verify (that )?you.?re (a )?human|are you a robot|just a moment|checking your browser/i;
 const PAGE_BLOCKED = /captcha|verify (that )?you.?re (a )?human|are you a robot|access denied|enable javascript and cookies|just a moment|sign in to continue|log in to continue/i;
 
 async function getChecker() {
@@ -41,6 +42,15 @@ async function checkUrl(tabId, item) {
     r = await run(tabId, analyzeJobsPage);
   } catch {
     return unreachable;
+  }
+  if (CAPTCHA_PAGE.test(r.text.slice(0, 600))) {
+    // Wait for the user to solve it (up to 15 minutes), then read the page again.
+    const solved = await waitForUser(tabId, async () => {
+      const again = await run(tabId, analyzeJobsPage);
+      if (!CAPTCHA_PAGE.test(again.text.slice(0, 600))) { r = again; return true; }
+      return false;
+    }, `${new URL(item.url).hostname} is asking for a check (captcha).`, 15 * 60 * 1000);
+    if (!solved) return unreachable;
   }
   if (r.notFound || r.text.length < 80 || PAGE_BLOCKED.test(r.text.slice(0, 600))) return unreachable;
 

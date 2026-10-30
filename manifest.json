@@ -8,7 +8,9 @@
     "scripting",
     "storage",
     "clipboardWrite",
-    "downloads"
+    "downloads",
+    "offscreen",
+    "notifications"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",

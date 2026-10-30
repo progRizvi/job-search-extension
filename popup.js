@@ -83,7 +83,10 @@ async function render() {
   state.textContent = running ? 'Running' : sitesRunning ? 'Finding sites' : collRunning ? 'Country search' : jobsRunning ? 'Checking jobs' : limitHit ? 'Done for today' : 'Ready';
 
   // Live message from the background run, with a countdown to the next page.
-  if (busy || auto.message) {
+  const { waiting } = await chrome.storage.local.get('waiting');
+  if (waiting) {
+    setStatus(`Waiting for you: ${waiting.what} Solve it in the separate window and the run continues.`, true);
+  } else if (busy || auto.message) {
     let msg = auto.message || '';
     if (busy && auto.nextAt) {
       msg += ` Next page in ${Math.max(0, Math.round((auto.nextAt - Date.now()) / 1000))}s.`;
@@ -439,6 +442,8 @@ async function renderGeo() {
   let note = coll.message || '';
   if (coll.running && coll.nextAt) note += ` Next search in ${Math.max(0, Math.round((coll.nextAt - Date.now()) / 1000))}s.`;
   $('geoNote').textContent = coll.running && coll.country ? `${coll.country}: ${note}` : note;
+  const { waiting } = await chrome.storage.local.get('waiting');
+  if (waiting) $('geoNote').textContent = `Waiting for you: ${waiting.what} Solve it in the separate window.`;
   $('geoNote').className = !coll.running && /^Stopped/.test(coll.message || '') ? 'hint err' : 'hint';
   if (!$('geo').open) return;
   try {

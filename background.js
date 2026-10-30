@@ -1,4 +1,4 @@
-importScripts('shared.js', 'xlsx.js', 'deepseek.js', 'serverClient.js', 'collector.js', 'checker.js');
+importScripts('shared.js', 'xlsx.js', 'deepseek.js', 'serverClient.js', 'collector.js', 'checker.js', 'alert.js');
 
 const MAX_SKIPS = 3; // already-visited pages we will click through before giving up
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -201,7 +201,16 @@ async function searchWeb(tabId, text, tried = []) {
       if ((await chrome.tabs.get(tabId)).status === 'complete') break;
     }
     await sleep(rnd(1500, 3500));
-    const res = await run(tabId, e.read);
+    let res = await run(tabId, e.read);
+    if (res.blocked) {
+      // A captcha: alert the user and wait for them to solve it in this window, then carry on.
+      const cleared = await waitForUser(tabId, async () => {
+        const again = await run(tabId, e.read);
+        if (!again.blocked && (again.links || []).length) { res = again; return true; }
+        return false;
+      }, `${e.name} is asking for a check (captcha).`);
+      if (!cleared) return { blocked: true, links: [], items: [] };
+    }
     if (!res.blocked && !res.unreadable && (res.links || []).length) return { ...res, engine: e.name }; // no links at all = not loaded or unreadable
     if (e.name === 'Google') googleBlocked = true; // blocked or unreadable: skip it for the rest of this run
   }
@@ -312,10 +321,12 @@ async function findSitesLoop(recheck = false, ids = null) {
               if ((await chrome.tabs.get(tabId)).status === 'complete') break;
             }
             await sleep(rnd(2500, 5000));
-            const li = await run(tabId, readLinkedInWebsite);
+            let li = await run(tabId, readLinkedInWebsite);
             await chrome.storage.local.set({ liDaily: { date: today(), count: liUsed + 1 } });
             if (li.loggedOut) {
-              return finishSites('Stopped: LinkedIn is asking you to sign in. Sign in in Chrome, then try again.', winId);
+              const back = await waitForUser(tabId, async () => !(await run(tabId, readLinkedInWebsite)).loggedOut, 'LinkedIn is asking you to sign in.');
+              if (!back) return finishSites('Stopped: LinkedIn is asking you to sign in. Sign in in Chrome, then try again.', winId);
+              li = await run(tabId, readLinkedInWebsite);
             }
             const fromLi = li.website ? pickCompanySite([li.website]) : '';
             if (fromLi) { site = fromLi; viaLinkedIn = true; }
