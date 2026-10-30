@@ -120,6 +120,30 @@ async function judgeJob(item, country, text, pick) {
   return open && fit ? { strict: false, job: { ...job, remoteScope: 'unknown (not stated)' } } : null;
 }
 
+// The fixed rules found no next page. Show DeepSeek the page's links and buttons and let it pick the one that
+// loads more jobs (or none). Returns {next: href} (the caller opens it), {clicked: true}, or {}.
+async function aiNext(tabId) {
+  let cand;
+  try { cand = await run(tabId, listNextCandidates); } catch { return {}; }
+  if (!cand || !cand.items.length) return {};
+  const ai = await deepseekJson(
+    'A program is reading a list of job postings page by page. From the numbered links and buttons, choose the one that loads the NEXT page ' +
+      'or the next batch of jobs. Never choose a link to a single job, a filter, a sort option, a previous page, the page it is already on, or ' +
+      'anything unrelated. If the list has no further page, answer null. Answer as {"index": number or null}.',
+    `Page: ${cand.url}\n${cand.hint ? `Pagination text: ${cand.hint}\n` : ''}Controls:\n` +
+      cand.items.map((x) => `${x.i}. [${x.tag}]${x.inPag ? ' [in pagination]' : ''} ${x.label} | ${x.href || '(button)'}`).join('\n')
+  );
+  const pick = ai && Number.isInteger(ai.index) ? cand.items.find((x) => x.i === ai.index) : null;
+  if (!pick) return {};
+  if (pick.href) {
+    // Stay on the same site and never "advance" to the page we are already on.
+    let ok = false;
+    try { ok = new URL(pick.href).origin === new URL(cand.url).origin && pick.href !== cand.url; } catch { /* not a URL */ }
+    return ok ? { next: pick.href } : {};
+  }
+  try { return await run(tabId, clickCandidate, [pick.i]); } catch { return {}; }
+}
+
 // A long job list: open every job one by one, each in its own tab that is closed afterwards (the list tab keeps
 // what it has loaded), and when every job on screen is done, press "Show more jobs" and carry on with the new ones.
 async function walkList(listTab, page, item, country) {
@@ -152,6 +176,7 @@ async function walkList(listTab, page, item, country) {
     await setChecker({ message: `${host}: ${opened} jobs read, loading more…` });
     let more;
     try { more = await run(listTab, loadMoreJobs); } catch { break; }
+    if (!more.next && !more.clicked) more = await aiNext(listTab); // the rules found nothing: ask the AI
     loads++;
     if (more.next) {
       try { await openPage(listTab, more.next); } catch { break; }

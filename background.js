@@ -35,8 +35,8 @@ async function downloadExcel() {
   });
 }
 
-const run = async (tabId, func) =>
-  (await chrome.scripting.executeScript({ target: { tabId }, func }))[0].result;
+const run = async (tabId, func, args) =>
+  (await chrome.scripting.executeScript({ target: { tabId }, func, ...(args ? { args } : {}) }))[0].result;
 
 // Waits in 1s slices so Stop takes effect quickly; the storage read every 10s
 // keeps the service worker from being put to sleep mid-wait.

@@ -466,11 +466,18 @@ function remoteMatches(remoteScope, workType, countryName, countries = []) {
   return false;
 }
 
-// Injected into a job list: loads the next batch. Clicks a "Show more jobs" button, or returns the link to the next page.
+// Injected into a job list: loads the next batch. In order: a "Show more jobs" button (clicked), a next-page link or
+// button, the link to page number N+1, and last of all scrolling for lists that load as you go.
+// Returns {clicked: true}, {next: href} (the caller opens it), or {} when there is nothing more.
 async function loadMoreJobs() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const here = location.href.split('#')[0];
+  const usable = (e) => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && !/\bdisabled\b/i.test(e.className || '');
+  const label = (e) => `${e.innerText || ''} ${e.getAttribute('aria-label') || ''} ${e.title || ''}`.replace(/\s+/g, ' ').trim();
+
+  // 1. "Show more jobs" / "Load more": press it.
   const more = [...document.querySelectorAll('button, [role="button"]')].filter(
-    (b) => /^(show|load|see|view) more( jobs| results)?$|^more jobs$/i.test((b.innerText || '').trim()) && !b.disabled && b.offsetParent
+    (b) => /^(show|load|see|view) more( jobs| results)?$|^more jobs$/i.test((b.innerText || '').trim()) && usable(b) && b.offsetParent
   );
   // Several pages have a plain "Show more" elsewhere (filters, sections): prefer the one that says jobs.
   const btn = more.find((b) => /job|result/i.test(b.innerText)) || more[0];
@@ -480,13 +487,84 @@ async function loadMoreJobs() {
     await sleep(3500);
     return { clicked: true };
   }
-  const next = [...document.querySelectorAll('a[href]')].find(
-    (a) => a.rel === 'next' || a.getAttribute('aria-label') === 'Next' || /^(next|next page)$/i.test((a.innerText || '').trim())
-  );
-  if (next) return { next: next.href };
-  // No button and no next link: many boards load more jobs as you scroll. Scroll down and see whether the page grows.
+
+  // 2. A "Next" link or button: rel=next, or "Next", "Next page", "Go to Next Page", ">" ... Inside a pagination
+  // area any label with the word next counts; elsewhere only an exact "Next" does (not "Next steps").
+  const PAG = 'nav[aria-label*="agin" i], [class*="pagination" i], [class*="pager" i], [role="navigation"]';
+  const exact = /^(go to )?next( page)?( ?[›»→>])?$|^[›»→>]$/i;
+  const inPag = [...document.querySelectorAll(PAG)].flatMap((n) => [...n.querySelectorAll('a[href], button')]);
+  const anyNext = [...document.querySelectorAll('a[href], button')];
+  const nextEl =
+    document.querySelector('a[rel~="next"][href]') ||
+    inPag.find((e) => usable(e) && (/\bnext\b|[›»→]/i.test(label(e)) && !/\bprev/i.test(label(e)))) ||
+    anyNext.find((e) => usable(e) && e.offsetParent && exact.test((e.innerText || '').split('\n')[0].trim().replace(/\s+/g, ' ')));
+  if (nextEl) {
+    const href = nextEl.href && nextEl.href.split('#')[0];
+    if (href && href !== here && !/^javascript:/i.test(href)) return { next: href };
+    if (!href || href === here) {
+      // A button that changes the list without leaving the page.
+      nextEl.scrollIntoView({ block: 'center' });
+      nextEl.click();
+      await sleep(3500);
+      return { clicked: true };
+    }
+  }
+
+  // 3. Numbered pages with no "Next": take the link to page N+1 (the page number is in the address or marked current).
+  const u = new URL(here);
+  const key = ['page', 'p', 'pg', 'pageNum'].find((k) => u.searchParams.has(k));
+  const cur = key ? Number(u.searchParams.get(key)) : Number((document.querySelector('[aria-current="page"]') || {}).innerText) || 1;
+  const want = cur + 1;
+  const numbered = [...document.querySelectorAll('a[href]')].find((a) => {
+    try {
+      const x = new URL(a.href);
+      return x.origin + x.pathname === u.origin + u.pathname && ['page', 'p', 'pg', 'pageNum'].some((k) => Number(x.searchParams.get(k)) === want);
+    } catch { return false; }
+  });
+  if (numbered) return { next: numbered.href.split('#')[0] };
+
+  // 4. No button and no next page: many boards load more jobs as you scroll. Scroll down and see whether the page grows.
   const before = document.body.scrollHeight;
   window.scrollTo(0, before);
   await sleep(3500);
   return document.body.scrollHeight > before ? { clicked: true } : {};
+}
+
+// Injected into a job list when the fixed rules found no next page: the links and buttons that could be one,
+// each given a number (data-lead-idx), for the AI to choose from. Job cards and long labels are left out.
+function listNextCandidates() {
+  const PAG = 'nav[aria-label*="agin" i], [class*="pagination" i], [class*="pager" i], [role="navigation"]';
+  const inPag = new Set([...document.querySelectorAll(PAG)].flatMap((n) => [...n.querySelectorAll('a[href], button, [role="button"]')]));
+  const height = document.body.scrollHeight;
+  const items = [];
+  const seen = new Set();
+  for (const e of document.querySelectorAll('a[href], button, [role="button"]')) {
+    if (!e.getClientRects().length) continue;
+    const text = (e.innerText || '').replace(/\s+/g, ' ').trim();
+    const aria = e.getAttribute('aria-label') || e.title || '';
+    const label = text || aria || '(icon only)';
+    const y = e.getBoundingClientRect().top + window.scrollY;
+    if (!inPag.has(e) && y < height * 0.5) continue; // pagination sits in a pagination area or at the foot of the page
+    if (label.length > 40) continue; // a job card or a paragraph, not a control
+    const href = e.tagName === 'A' ? e.href.split('#')[0] : null;
+    if (href && !/^https?:/.test(href)) continue;
+    const key = `${label}|${href}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    e.setAttribute('data-lead-idx', String(items.length));
+    items.push({ i: items.length, tag: e.tagName.toLowerCase(), label: aria && aria !== label ? `${label} (${aria})` : label, href, inPag: inPag.has(e) });
+    if (items.length >= 40) break;
+  }
+  const hint = [...document.querySelectorAll(PAG)].map((n) => (n.innerText || '').replace(/\s+/g, ' ').slice(0, 80)).filter(Boolean).slice(0, 2).join(' / ');
+  return { url: location.href.split('#')[0], items, hint };
+}
+
+// Injected: press the control that listNextCandidates numbered idx.
+async function clickCandidate(idx) {
+  const e = document.querySelector(`[data-lead-idx="${idx}"]`);
+  if (!e) return {};
+  e.scrollIntoView({ block: 'center' });
+  e.click();
+  await new Promise((r) => setTimeout(r, 3500));
+  return { clicked: true };
 }
