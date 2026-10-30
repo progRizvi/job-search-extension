@@ -397,7 +397,7 @@ async function loadCountries() {
 }
 
 $('manualAdd').addEventListener('click', async () => {
-  const urls = $('manualUrls').value.split(/\s+/).map((u) => u.trim()).filter(Boolean);
+  const urls = $('manualUrls').value.split(/[\r\n,]+/).map((u) => u.trim()).filter(Boolean);
   const note = $('manualNote');
   note.className = 'note';
   if (!urls.length) { note.textContent = 'Paste at least one link.'; return; }
