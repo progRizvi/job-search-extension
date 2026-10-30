@@ -306,10 +306,12 @@ async function analyzeJobsPage() {
 // Injected into a single job posting: its visible text, trimmed for the model.
 async function readJobPage() {
   await new Promise((r) => setTimeout(r, 2500));
-  return {
-    title: document.title,
-    text: (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 6000),
-  };
+  let text = (document.body?.innerText || '').replace(/\s+/g, ' ').trim();
+  // Job sites append other jobs under the posting ("More jobs like this one", "Similar jobs"...).
+  // Cut them off, or the judgement mixes the other jobs' titles, salaries and places into this job.
+  const cut = text.search(/More jobs like this one|Similar jobs|Jobs you may (also )?like|Recommended jobs|Related jobs|People also viewed/i);
+  if (cut > 300) text = text.slice(0, cut);
+  return { title: document.title, text: text.slice(0, 6000) };
 }
 
 // Injected into a Bing results page. Same shape as readGoogleResults.

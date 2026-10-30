@@ -6,6 +6,8 @@ const MAX_LOAD_MORE = 60; // times a list page is asked for more jobs, as a safe
 const MAX_READ = 8; // job pages opened when a page is not a long list
 const MAX_SAVED = 5; // matching jobs kept when a page is not a long list
 const CHECK_FIT_RANK = { good: 2, maybe: 1, '': 0 };
+// A link that is itself one job. Such a page also lists "more jobs like this one": those are not a list to walk.
+const SINGLE_JOB_URL = /\/job-listing\/|\/viewjob|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|\/remote-jobs\/[^/]+-\d{5,}/i;
 const CAPTCHA_PAGE = /captcha|verify (that )?you.?re (a )?human|are you a robot|just a moment|checking your browser|humans only|prevent misuse|press (and|&) hold|security check/i;
 const PAGE_BLOCKED = /captcha|verify (that )?you.?re (a )?human|are you a robot|access denied|enable javascript and cookies|just a moment|sign in to continue|log in to continue/i;
 
@@ -172,7 +174,9 @@ async function checkUrl(tabId, item) {
       } catch { /* try the next one */ }
     }
   }
-  if (kind === 'posting' && !page.titles.length) page = { ...page, titles: [{ title: (await run(tabId, readJobPage)).title, url: landed }] };
+  // The saved link is one job: judge that job only, not the similar jobs listed on its page.
+  if (SINGLE_JOB_URL.test(landed)) page = { ...page, titles: [] };
+  if ((kind === 'posting' || SINGLE_JOB_URL.test(landed)) && !page.titles.length) page = { ...page, titles: [{ title: (await run(tabId, readJobPage)).title, url: landed }] };
 
   const base = { careersUrl: listUrl, openings: page.titles.length ? 'yes' : 'no', checkedBy: 'DeepSeek' };
   if (!page.titles.length) return { status: 'checked', kind, results: [base] };
