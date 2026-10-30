@@ -238,7 +238,7 @@ async function analyzeJobsPage() {
   const SENIOR = /\b(senior|sr\.?|lead)\b/i;
   const BACKEND_TITLE = /(back[- ]?end|server[- ]?side|full[- ]?stack|node(\.?js)?|php|laravel|java ?script|js) (software )?(engineer|developer)/i;
   const NAV = /^(careers?|jobs?|apply|apply now|view all|see all|all jobs|open positions|learn more|benefits|culture|about|home|contact|life at.*|our team)$/i;
-  const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
+  const JOBLINK = /\/(jobs?|positions?|openings?|postings?|vacanc\w*|careers?|roles?)\/[^/]+|\/job-listing\/|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
 
   const jobs = new Map();
   for (const a of document.querySelectorAll('a[href]')) {

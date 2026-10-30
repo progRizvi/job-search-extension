@@ -1,8 +1,10 @@
 // Checks the links saved by the country search: reads the page, follows the links DeepSeek picks,
 // and keeps the best job that is remote and open to someone in the searched country.
 const CHECK_DAILY_LIMIT = 300;
+const MAX_READ = 8; // job pages opened per link
+const MAX_SAVED = 5; // matching jobs kept per link
 const CHECK_FIT_RANK = { good: 2, maybe: 1, '': 0 };
-const CAPTCHA_PAGE = /captcha|verify (that )?you.?re (a )?human|are you a robot|just a moment|checking your browser/i;
+const CAPTCHA_PAGE = /captcha|verify (that )?you.?re (a )?human|are you a robot|just a moment|checking your browser|humans only|prevent misuse|press (and|&) hold|security check/i;
 const PAGE_BLOCKED = /captcha|verify (that )?you.?re (a )?human|are you a robot|access denied|enable javascript and cookies|just a moment|sign in to continue|log in to continue/i;
 
 async function getChecker() {
@@ -80,21 +82,21 @@ async function checkUrl(tabId, item) {
   if (kind === 'posting' && !page.titles.length) page = { ...page, titles: [{ title: (await run(tabId, readJobPage)).title, url: landed }] };
 
   const base = { careersUrl: listUrl, openings: page.titles.length ? 'yes' : 'no', checkedBy: 'DeepSeek' };
-  if (!page.titles.length) return { status: 'checked', kind, result: base };
+  if (!page.titles.length) return { status: 'checked', kind, results: [base] };
 
   // Shortlist titles, then read each job and judge it for the searched country.
   const country = item.countries[0] || '';
   const short = await deepseekJson(
-    `You match job openings to a candidate. Candidate: ${await getProfile()} From the numbered job titles choose up to 3 that best fit, best first. ` +
+    `You match job openings to a candidate. Candidate: ${await getProfile()} From the numbered job titles choose up to ${MAX_READ} that best fit, best first. ` +
       'The candidate only wants remote roles. Use an empty list if none is a reasonable fit. Answer as {"indexes": [numbers]}.',
     page.titles.map((t, i) => `${i}. ${t.title}`).join('\n')
   );
   const picks = short && Array.isArray(short.indexes)
-    ? short.indexes.filter((i) => Number.isInteger(i) && page.titles[i]).slice(0, 3).map((i) => page.titles[i])
-    : page.backend.slice(0, 3);
+    ? short.indexes.filter((i) => Number.isInteger(i) && page.titles[i]).slice(0, MAX_READ).map((i) => page.titles[i])
+    : page.backend.slice(0, MAX_READ);
 
-  let best = null;
-  let unstated = null; // remote and a good fit, but the posting never says who may apply
+  const strict = []; // remote and open to the country
+  const unstated = []; // remote and a fit, but the posting never says who may apply
   for (const pick of picks) {
     let text = '';
     try {
@@ -119,22 +121,23 @@ async function checkUrl(tabId, item) {
     if (fit === 'poor') continue;
     if (!item.countries.some((c) => remoteMatches(ai.remoteScope, ai.workType, c, item.countries))) {
       const open = String(ai.workType).toLowerCase() === 'remote' && /^unknown/.test(String(ai.remoteScope || 'unknown').toLowerCase());
-      if (open && fit && (!unstated || CHECK_FIT_RANK[fit] > CHECK_FIT_RANK[unstated.fit])) {
-        unstated = { fit, title: pick.title, url: pick.url, workType: ai.workType, remoteScope: 'unknown (not stated)', stack: ai.stack };
-      }
+      if (open && fit) unstated.push({ fit, title: pick.title, url: pick.url, workType: ai.workType, remoteScope: 'unknown (not stated)', stack: ai.stack });
       continue;
     }
-    if (!best || CHECK_FIT_RANK[fit] > CHECK_FIT_RANK[best.fit]) {
-      best = { fit, title: pick.title, url: pick.url, workType: ai.workType, remoteScope: ai.remoteScope, stack: ai.stack };
-    }
-    if (fit === 'good') break;
+    strict.push({ fit, title: pick.title, url: pick.url, workType: ai.workType, remoteScope: ai.remoteScope, stack: ai.stack });
+    if (strict.length >= MAX_SAVED) break;
   }
-  best = best || unstated;
+  // Best first: confirmed scope before unstated, then good fits before maybes.
+  const rank = (l) => l.sort((x, y) => CHECK_FIT_RANK[y.fit] - CHECK_FIT_RANK[x.fit]);
+  const kept = [...rank(strict), ...rank(unstated)].slice(0, MAX_SAVED);
   return {
     status: 'checked', kind,
-    result: best ? { ...base, jobTitle: best.title, jobUrl: best.url, workType: best.workType, remoteScope: best.remoteScope, fit: best.fit, stack: String(best.stack || '') } : base,
+    results: kept.length
+      ? kept.map((j) => ({ ...base, jobTitle: j.title, jobUrl: j.url, workType: j.workType, remoteScope: j.remoteScope, fit: j.fit, stack: String(j.stack || '') }))
+      : [base],
   };
 }
+
 
 async function checkLoop() {
   let winId;
@@ -161,9 +164,10 @@ async function checkLoop() {
       try { out = await checkUrl(tabId, next); } catch { out = { status: 'unreachable', kind: 'unknown' }; }
       await serverFetch('/checker/result', { id: next.id, ...out });
       await chrome.storage.local.set({ checkerDaily: { date: today(), count: used + 1 } });
-      if (out.result && out.result.jobUrl) matches++;
+      const found = (out.results || []).filter((r) => r.jobUrl).length;
+      matches += found;
       done++;
-      await setChecker({ message: `${new URL(next.url).hostname}: ${out.status === 'unreachable' ? 'could not read the page' : out.result && out.result.jobUrl ? 'matching job found' : 'no matching job'}. ${done} checked, ${matches} matches.` });
+      await setChecker({ message: `${new URL(next.url).hostname}: ${out.status === 'unreachable' ? 'could not read the page' : found ? `${found} matching ${found === 1 ? 'job' : 'jobs'} found` : 'no matching job'}. ${done} checked, ${matches} matches.` });
       if (!(await checkerPause(Math.round(rnd(5, 12))))) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
     }
   } catch (e) {

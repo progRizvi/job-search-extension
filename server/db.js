@@ -10,4 +10,14 @@ export function makePool(database = process.env.MYSQL_DATABASE) {
 
 export async function migrate(pool) {
   await pool.query(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+  // Older databases kept one job per link (url_id was the key). Move them to one row per job.
+  const [cols] = await pool.query(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_results' AND COLUMN_NAME = 'job_hash'"
+  );
+  if (!cols.length) {
+    await pool.query(
+      "ALTER TABLE job_results DROP PRIMARY KEY, ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST, ADD COLUMN job_hash CHAR(40) NOT NULL DEFAULT '' AFTER url_id, ADD UNIQUE KEY uq_url_job (url_id, job_hash)"
+    );
+    await pool.query('UPDATE job_results SET job_hash = SHA1(job_url) WHERE job_url IS NOT NULL');
+  }
 }

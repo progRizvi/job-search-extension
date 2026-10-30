@@ -90,3 +90,15 @@ test('Anywhere is offered for manual links but is not counted as a country', asy
   assert.equal(r.added, 1);
   assert.deepEqual((await call('/checker/next')).countries, ['Anywhere']);
 });
+
+test('a list page can save several matching jobs, and a re-check replaces them', async () => {
+  const a = await call('/collector/next');
+  await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://board.com/list'] });
+  const next = await call('/checker/next');
+  const job = (n) => ({ careersUrl: 'https://board.com/list', openings: 'yes', jobTitle: `Node Dev ${n}`, jobUrl: `https://board.com/job/${n}`, workType: 'remote', remoteScope: 'worldwide', fit: 'good', stack: 'node', checkedBy: 'DeepSeek' });
+  await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', results: [job(1), job(2), job(3)] });
+  assert.equal((await call('/export')).rows.length, 3);
+  assert.equal((await call('/stats')).matches, 3);
+  await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', results: [job(9)] });
+  assert.deepEqual((await call('/export')).rows.map((r) => r.jobTitle), ['Node Dev 9']);
+});

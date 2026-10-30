@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS url_countries (
   PRIMARY KEY (url_id, country_code, query_text)
 );
 CREATE TABLE IF NOT EXISTS job_results (
-  url_id INT PRIMARY KEY,
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  url_id INT NOT NULL,
+  job_hash CHAR(40) NOT NULL DEFAULT '',
   careers_url TEXT,
   openings VARCHAR(10),
   job_title VARCHAR(200),
@@ -34,5 +36,6 @@ CREATE TABLE IF NOT EXISTS job_results (
   fit VARCHAR(10),
   stack VARCHAR(200),
   checked_by VARCHAR(20),
-  checked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  checked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_url_job (url_id, job_hash)
 );

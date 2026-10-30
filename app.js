@@ -397,7 +397,12 @@ async function loadCountries() {
 }
 
 $('manualAdd').addEventListener('click', async () => {
-  const urls = $('manualUrls').value.split(/[\r\n,]+/).map((u) => u.trim()).filter(Boolean);
+  // One link per line. Never split on commas: Glassdoor and Indeed links contain them (…SRCH_KO0,24.htm).
+  const urls = $('manualUrls').value.split(/\r?\n/).flatMap((line) => {
+    const t = line.trim();
+    const parts = t.split(/\s+/);
+    return parts.length > 1 && parts.every((p) => /^https?:\/\//i.test(p)) ? parts : [t]; // several links on one line, separated by spaces
+  }).filter(Boolean);
   const note = $('manualNote');
   note.className = 'note';
   if (!urls.length) { note.textContent = 'Paste at least one link.'; return; }

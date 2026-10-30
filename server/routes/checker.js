@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createHash } from 'node:crypto';
 
 const KINDS = ['board', 'posting', 'company', 'unknown'];
 const cut = (v, n) => (v == null ? null : String(v).slice(0, n));
@@ -21,17 +22,20 @@ export function checkerRoutes(pool) {
 
   r.post('/checker/result', async (req, res, next) => {
     try {
-      const { id, status, kind, result } = req.body || {};
+      const { id, status, kind, result, results } = req.body || {};
       if (!Number.isInteger(id) || !['checked', 'unreachable'].includes(status)) {
         return res.status(400).json({ error: 'bad id or status' });
       }
       await pool.query('UPDATE urls SET status = ?, kind = ? WHERE id = ?', [status, KINDS.includes(kind) ? kind : 'unknown', id]);
-      if (result) {
+      // A list page can have several matching jobs; a re-check replaces the earlier ones.
+      const list = Array.isArray(results) ? results : result ? [result] : [];
+      if (list.length) await pool.query('DELETE FROM job_results WHERE url_id = ?', [id]);
+      for (const x of list) {
         await pool.query(
-          `REPLACE INTO job_results (url_id, careers_url, openings, job_title, job_url, work_type, remote_scope, fit, stack, checked_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, result.careersUrl || null, cut(result.openings, 10), cut(result.jobTitle, 200), result.jobUrl || null,
-            cut(result.workType, 10), cut(result.remoteScope, 120), cut(result.fit, 10), cut(result.stack, 200), cut(result.checkedBy, 20)]
+          `REPLACE INTO job_results (url_id, job_hash, careers_url, openings, job_title, job_url, work_type, remote_scope, fit, stack, checked_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, x.jobUrl ? createHash('sha1').update(String(x.jobUrl)).digest('hex') : '', x.careersUrl || null, cut(x.openings, 10), cut(x.jobTitle, 200), x.jobUrl || null,
+            cut(x.workType, 10), cut(x.remoteScope, 120), cut(x.fit, 10), cut(x.stack, 200), cut(x.checkedBy, 20)]
         );
       }
       res.json({ ok: true });

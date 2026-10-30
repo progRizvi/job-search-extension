@@ -12,8 +12,7 @@ export function exportRoutes(pool) {
            JOIN urls u ON u.id = uc.url_id
            JOIN countries c ON c.code = uc.country_code
            LEFT JOIN job_results j ON j.url_id = u.id
-          GROUP BY u.id, uc.country_code
-          ORDER BY c.name, u.id`
+          ORDER BY c.name, u.id, j.id`
       );
       res.json({
         rows: rows.map((x) => ({

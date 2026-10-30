@@ -5,11 +5,11 @@ class ServerDown extends Error {}
 
 // GET when body is undefined, otherwise POST as JSON. Throws ServerDown when the server cannot be used at all.
 async function serverFetch(path, body) {
-  const { leadKey } = await chrome.storage.local.get('leadKey');
+  const { leadKey, leadServer } = await chrome.storage.local.get(['leadKey', 'leadServer']); // leadServer is optional: another address or port
   if (!leadKey) throw new ServerDown('No server key saved yet.');
   let r;
   try {
-    r = await fetch(SERVER_URL + path, {
+    r = await fetch((leadServer || SERVER_URL) + path, {
       method: body === undefined ? 'GET' : 'POST',
       headers: { 'x-lead-key': leadKey, 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
