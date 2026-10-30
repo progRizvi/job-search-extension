@@ -21,6 +21,8 @@ async function render() {
   const sitesRunning = !!sites.running;
   const { jobs = {} } = await chrome.storage.local.get('jobs');
   const jobsRunning = !!jobs.running;
+  const { collector: coll = {} } = await chrome.storage.local.get('collector');
+  const collRunning = !!coll.running;
   const limitHit = count >= DAILY_LIMIT;
 
   $('count').textContent = count;
@@ -42,7 +44,7 @@ async function render() {
   $('urlOpen').disabled = $('urlCopy').disabled = !lastUrl;
   $('urlText').textContent = lastUrl || 'No page saved yet. Collect a page and it will appear here.';
 
-  main.disabled = main.disabled || sitesRunning || jobsRunning;
+  main.disabled = main.disabled || sitesRunning || jobsRunning || collRunning;
 
   const missing = Object.values(companies).filter((c) => !c.website && !c.siteChecked).length;
   const sitesBtn = $('sites');
@@ -51,14 +53,14 @@ async function render() {
     : missing
       ? `Find websites on Google (${missing} missing)`
       : 'Find websites on Google';
-  sitesBtn.disabled = running || jobsRunning || (!sitesRunning && !missing);
+  sitesBtn.disabled = running || jobsRunning || collRunning || (!sitesRunning && !missing);
 
   const { deepseekKey: dsKey } = await chrome.storage.local.get('deepseekKey');
   const unverified = Object.values(companies).filter((c) => c.website && c.websiteBy !== 'DeepSeek' && c.websiteBy !== 'LinkedIn').length;
   const recheckBtn = $('recheck');
   recheckBtn.hidden = !dsKey || !unverified;
   recheckBtn.textContent = `Re-check websites with DeepSeek (${unverified})`;
-  recheckBtn.disabled = running || sitesRunning || jobsRunning;
+  recheckBtn.disabled = running || sitesRunning || jobsRunning || collRunning;
 
   const resetBtn = $('resetJobs');
   const hasJobs = Object.values(companies).some((c) => c.jobsChecked || c.careersUrl || c.backendJobUrl);
@@ -73,12 +75,12 @@ async function render() {
     : toCheck
       ? `Find backend jobs (${toCheck} sites)`
       : 'Find backend jobs';
-  jobsBtn.disabled = running || sitesRunning || (!jobsRunning && !toCheck);
+  jobsBtn.disabled = running || sitesRunning || collRunning || (!jobsRunning && !toCheck);
 
-  const busy = running || sitesRunning || jobsRunning;
+  const busy = running || sitesRunning || jobsRunning || collRunning;
   const state = $('state');
   state.dataset.s = busy ? 'running' : limitHit ? 'done' : 'ready';
-  state.textContent = running ? 'Running' : sitesRunning ? 'Finding sites' : jobsRunning ? 'Checking jobs' : limitHit ? 'Done for today' : 'Ready';
+  state.textContent = running ? 'Running' : sitesRunning ? 'Finding sites' : collRunning ? 'Country search' : jobsRunning ? 'Checking jobs' : limitHit ? 'Done for today' : 'Ready';
 
   // Live message from the background run, with a countdown to the next page.
   if (busy || auto.message) {
@@ -417,6 +419,53 @@ $('researchSel').addEventListener('click', async () => {
   renderReview();
   render();
 });
+
+// ---- Country job search (local server) ----
+async function renderGeo() {
+  const st = await chrome.storage.local.get(['collector', 'leadKey', 'auto', 'sites', 'jobs']);
+  const coll = st.collector || {};
+  const otherBusy = !!(st.auto?.running || st.sites?.running || st.jobs?.running);
+  const btn = $('geoMain');
+  btn.textContent = coll.running ? 'Stop country search' : 'Start country search';
+  btn.disabled = !st.leadKey || (!coll.running && otherBusy);
+  let note = coll.message || '';
+  if (coll.running && coll.nextAt) note += ` Next search in ${Math.max(0, Math.round((coll.nextAt - Date.now()) / 1000))}s.`;
+  $('geoNote').textContent = coll.running && coll.country ? `${coll.country}: ${note}` : note;
+  $('geoNote').className = !coll.running && /^Stopped/.test(coll.message || '') ? 'hint err' : 'hint';
+  if (!$('geo').open) return;
+  try {
+    const s = await serverFetch('/stats');
+    $('geoServer').textContent = 'Server connected.';
+    $('geoServer').className = 'hint';
+    $('geoProgress').textContent = `${s.countriesDone} of ${s.countriesTotal} countries searched, ${s.urls} links saved.`;
+  } catch (e) {
+    $('geoServer').textContent = e instanceof ServerDown ? `${e.message} Start server/start.bat.` : e.message;
+    $('geoServer').className = 'hint err';
+    $('geoProgress').textContent = '';
+  }
+}
+$('geo').addEventListener('toggle', renderGeo);
+$('geoSaveKey').addEventListener('click', async () => {
+  const key = $('geoKey').value.trim();
+  if (!key) return;
+  await chrome.storage.local.set({ leadKey: key });
+  $('geoKey').value = '';
+  $('geoKey').placeholder = 'Key saved. Paste a new one to replace it.';
+  renderGeo();
+});
+$('geoMain').addEventListener('click', async () => {
+  const { collector = {} } = await chrome.storage.local.get('collector');
+  if (collector.running) {
+    await chrome.runtime.sendMessage({ type: 'stopCollector' });
+    return renderGeo();
+  }
+  $('geoNote').textContent = 'Starting… a separate window will open.';
+  const res = await chrome.runtime.sendMessage({ type: 'startCollector' });
+  if (res && !res.ok) { $('geoNote').textContent = `Could not start: ${res.error}`; $('geoNote').className = 'hint err'; }
+  renderGeo();
+});
+setInterval(renderGeo, 3000);
+renderGeo();
 
 buildSegments();
 renderDeepseek();

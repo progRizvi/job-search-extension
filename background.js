@@ -202,7 +202,7 @@ async function searchWeb(tabId, text, tried = []) {
     }
     await sleep(rnd(1500, 3500));
     const res = await run(tabId, e.read);
-    if (!res.blocked && !res.unreadable) return { ...res, engine: e.name };
+    if (!res.blocked && !res.unreadable && (res.links || []).length) return { ...res, engine: e.name }; // no links at all = not loaded or unreadable
     if (e.name === 'Google') googleBlocked = true; // blocked or unreadable: skip it for the rest of this run
   }
   return { blocked: true, links: [], items: [] };

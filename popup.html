@@ -52,6 +52,19 @@
     <p id="reviewNote" class="hint"></p>
   </details>
 
+  <details id="geo" class="review">
+    <summary>Country job search</summary>
+    <p class="hint">Searches the web country by country for remote Node, PHP, backend and full-stack jobs, and saves every result link in your local database.</p>
+    <p id="geoServer" class="hint" role="status"></p>
+    <input id="geoKey" type="password" placeholder="Server key (LEAD_KEY from server/.env)" autocomplete="off" spellcheck="false">
+    <div class="reviewTools">
+      <button id="geoSaveKey" type="button">Save key</button>
+    </div>
+    <p id="geoProgress" class="hint"></p>
+    <button id="geoMain" class="primary small" type="button" disabled>Start country search</button>
+    <p id="geoNote" class="hint" role="status" aria-live="polite"></p>
+  </details>
+
   <div class="exports">
     <button id="xlsx" type="button">Export to Excel</button>
     <button id="copyAll" type="button">Copy all</button>
@@ -73,6 +86,7 @@
 
   <script src="shared.js"></script>
   <script src="xlsx.js"></script>
+  <script src="serverClient.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
