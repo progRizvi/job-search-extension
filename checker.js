@@ -1,6 +1,8 @@
 // Checks the links saved by the country search: reads the page, follows the links DeepSeek picks,
 // and keeps the best job that is remote and open to someone in the searched country.
 const CHECK_DAILY_LIMIT = 300;
+const BREAK_EVERY = 10; // pages read from one site before it gets a rest
+const BREAK_SEC = [180, 300]; // how long the rest lasts, in seconds (random in this range)
 const MAX_JOBS_PER_LINK = 300; // jobs opened one by one on a single list page
 const MAX_LOAD_MORE = 60; // times a list page is asked for more jobs, as a safety stop
 const MAX_READ = 8; // job pages opened when a page is not a long list
@@ -33,9 +35,30 @@ async function checkerPause(sec) {
   await setChecker({ nextAt: Date.now() + sec * 1000 });
   for (let i = 0; i < sec; i++) {
     await sleep(1000);
+    if (!(await holdIfPaused())) return false;
     if (!(await getChecker()).running) return false;
   }
   await setChecker({ nextAt: null });
+  return true;
+}
+
+// Pages read per site in this run. After every BREAK_EVERY of them the site gets a rest, so a long list does not
+// hammer one server. (The numbers can be changed with the storage key checkerTuning: {breakEvery, breakSec: [min, max]}.)
+const siteVisits = new Map();
+const siteRested = new Map();
+
+// Returns false when the run was stopped during the rest.
+async function restIfNeeded(host) {
+  const tune = (await chrome.storage.local.get('checkerTuning')).checkerTuning || {};
+  const every = tune.breakEvery || BREAK_EVERY;
+  const [lo, hi] = tune.breakSec || BREAK_SEC;
+  const seen = siteVisits.get(host) || 0;
+  if (seen > 0 && seen % every === 0 && siteRested.get(host) !== seen) {
+    siteRested.set(host, seen);
+    await setChecker({ message: `Resting ${host} for a few minutes after ${seen} pages, to be gentle on the site.` });
+    if (!(await checkerPause(Math.round(rnd(lo, hi))))) return false;
+  }
+  siteVisits.set(host, seen + 1);
   return true;
 }
 
@@ -45,6 +68,7 @@ const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); 
 // Returns the job's text, or '' when it cannot be read. Waits for the user on a captcha.
 async function readJobText(windowId, url) {
   let tab;
+  if (!(await restIfNeeded(hostOf(url)))) return '';
   try {
     tab = await chrome.tabs.create({ windowId, url, active: true });
     for (let i = 0; i < 30; i++) {
@@ -110,6 +134,7 @@ async function walkList(listTab, page, item, country) {
   for (;;) {
     for (const card of cards) {
       if (seen.has(keyOf(card))) continue;
+      if (!(await holdIfPaused())) return { strict, unstated, opened };
       if (opened >= MAX_JOBS_PER_LINK || !(await getChecker()).running) return { strict, unstated, opened };
       seen.add(keyOf(card));
       opened++;
@@ -241,8 +266,11 @@ async function checkLoop(onlyId = null) {
     const tabId = win.tabs[0].id;
     let matches = 0;
     let done = 0;
+    siteVisits.clear();
+    siteRested.clear();
     for (;;) {
       if (!(await getChecker()).running) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
+      if (!(await holdIfPaused())) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
       const d = (await chrome.storage.local.get('checkerDaily')).checkerDaily;
       const used = d && d.date === today() ? d.count : 0;
       if (used >= CHECK_DAILY_LIMIT) return finishChecker(`Done for today: ${CHECK_DAILY_LIMIT} links checked. ${matches} matching jobs found.`, winId);

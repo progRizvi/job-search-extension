@@ -42,8 +42,22 @@ async function waitForUser(tabId, isClear, what, limitMs = WAIT_LIMIT_MS) {
   }
 }
 
+// Pause: a run holds still at its next safe point until the user resumes it. Returns false when the run was
+// stopped while it waited, so the caller can stop too.
+async function holdIfPaused() {
+  while ((await chrome.storage.local.get('paused')).paused) {
+    if (!(await anyRunActive())) {
+      await chrome.storage.local.remove('paused');
+      return false;
+    }
+    await sleep(1000);
+  }
+  return true;
+}
+
 // Tells the user a run ended: finished, or stopped by an error. Their own Stop press is not announced.
 async function alertFinished(message) {
+  await chrome.storage.local.remove('paused'); // a run that ended is no longer paused
   if (!message || /^Stopped by you/.test(message)) return;
   const done = /^Done/.test(message);
   await alertUser(done ? 'Task complete' : 'Run stopped', message);

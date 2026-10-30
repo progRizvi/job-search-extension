@@ -45,6 +45,7 @@ async function pause(sec, alive = async () => (await getAuto()).running) {
   for (let i = 0; i < sec; i++) {
     await sleep(1000);
     if (i % 10 === 9) await getAuto();
+    if (!(await holdIfPaused())) return false;
     if (!(await alive())) return false;
   }
   await setAuto({ nextAt: null });
@@ -730,3 +731,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 });
+
+// A pause must not survive a browser restart.
+chrome.runtime.onStartup.addListener(() => chrome.storage.local.remove('paused'));
+chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove('paused'));

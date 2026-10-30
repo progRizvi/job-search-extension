@@ -52,3 +52,24 @@ test('alertFinished announces Done and errors, but not the user pressing Stop', 
   }
   assert.deepEqual([calls.beep, calls.notify], [2, 2]);
 });
+
+test('holdIfPaused waits while paused and carries on when resumed', async () => {
+  const { ctx, store } = load();
+  store.paused = true;
+  setTimeout(() => { delete store.paused; }, 40);
+  assert.equal(await vm.runInContext('holdIfPaused()', ctx), true);
+});
+
+test('holdIfPaused gives up and clears the flag when the run was stopped meanwhile', async () => {
+  const { ctx, store } = load(false); // no run is active
+  store.paused = true;
+  assert.equal(await vm.runInContext('holdIfPaused()', ctx), false);
+  assert.equal(store.paused, undefined);
+});
+
+test('a run that ends is no longer paused', async () => {
+  const { ctx, store } = load();
+  store.paused = true;
+  await vm.runInContext('alertFinished("Stopped by you.")', ctx);
+  assert.equal(store.paused, undefined);
+});

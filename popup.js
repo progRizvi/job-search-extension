@@ -20,7 +20,7 @@ const RUNS = [
 
 async function render() {
   const { count, companies } = await load();
-  const st = await chrome.storage.local.get(['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting']);
+  const st = await chrome.storage.local.get(['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting', 'paused']);
   const auto = st.auto || {};
   const active = RUNS.find(([k]) => st[k] && st[k].running);
   const limitHit = count >= DAILY_LIMIT;
@@ -33,7 +33,11 @@ async function render() {
 
   // Same wording as the workspace's Now strip.
   const now = $('now');
-  if (st.waiting) {
+  if (st.paused && active && !st.waiting) {
+    now.dataset.s = 'waiting';
+    $('nowTitle').textContent = 'Paused';
+    $('nowMsg').textContent = 'Resume it from the workspace.';
+  } else if (st.waiting) {
     now.dataset.s = 'waiting';
     $('nowTitle').textContent = 'Waiting for you';
     $('nowMsg').textContent = `${st.waiting.what} Solve it in the separate window and the run continues.`;

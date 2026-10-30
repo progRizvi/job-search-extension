@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const PAGES = ['overview', 'companies', 'country', 'settings'];
-const KEYS = ['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting', 'leadKey', 'deepseekKey', 'deepseekError', 'dsStats', 'lastUrl', 'visited', 'collectorDaily', 'checkerDaily'];
+const KEYS = ['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting', 'paused', 'leadKey', 'deepseekKey', 'deepseekError', 'dsStats', 'lastUrl', 'visited', 'collectorDaily', 'checkerDaily'];
 
 let S = {}; // everything read from storage on the last refresh
 let server = { ok: false, error: 'Checking…', stats: null, matches: [] };
@@ -102,6 +102,18 @@ function renderNow() {
   const run = activeRun();
   const now = $('now');
   const stop = $('nowStop');
+  const pauseBtn = $('nowPause');
+  pauseBtn.hidden = !run;
+  pauseBtn.textContent = S.paused ? 'Resume' : 'Pause';
+  pauseBtn.onclick = () => chrome.storage.local.set({ paused: !S.paused });
+  if (S.paused && run && !S.waiting) {
+    now.dataset.s = 'waiting';
+    $('nowTitle').textContent = 'Paused';
+    $('nowMsg').textContent = `${run.title} will hold at the next safe point. Press Resume to continue.`;
+    stop.hidden = false;
+    stop.onclick = () => send(run.stop);
+    return;
+  }
   if (S.waiting) {
     now.dataset.s = 'waiting';
     $('nowTitle').textContent = 'Waiting for you';

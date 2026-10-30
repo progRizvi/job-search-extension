@@ -25,6 +25,7 @@ async function collectorPause(sec) {
   await setCollector({ nextAt: Date.now() + sec * 1000 });
   for (let i = 0; i < sec; i++) {
     await sleep(1000);
+    if (!(await holdIfPaused())) return false;
     if (!(await getCollector()).running) return false;
   }
   await setCollector({ nextAt: null });
@@ -44,6 +45,7 @@ async function collectLoop() {
     const tabId = win.tabs[0].id;
     for (;;) {
       if (!(await getCollector()).running) return finishCollector('Stopped by you.', winId);
+      if (!(await holdIfPaused())) return finishCollector('Stopped by you.', winId);
 
       const d = (await chrome.storage.local.get('collectorDaily')).collectorDaily;
       const used = d && d.date === today() ? d.count : 0;
