@@ -2,7 +2,7 @@
 // and keeps the best job that is remote and open to someone in the searched country.
 const CHECK_DAILY_LIMIT = 300;
 const BREAK_EVERY = 10; // pages read from one site before it gets a rest
-const BREAK_SEC = [180, 300]; // how long the rest lasts, in seconds (random in this range)
+const BREAK_SEC = [60, 100]; // how long the rest lasts, in seconds (random in this range)
 const MAX_JOBS_PER_LINK = 300; // jobs opened one by one on a single list page
 const MAX_LOAD_MORE = 60; // times a list page is asked for more jobs, as a safety stop
 const MAX_READ = 8; // job pages opened when a page is not a long list
@@ -57,7 +57,7 @@ async function restIfNeeded(host) {
   const seen = siteVisits.get(host) || 0;
   if (seen > 0 && seen % every === 0 && siteRested.get(host) !== seen) {
     siteRested.set(host, seen);
-    await setChecker({ message: `Resting ${host} for a few minutes after ${seen} pages, to be gentle on the site.` });
+    await setChecker({ message: `Resting ${host} for about a minute after ${seen} pages, to be gentle on the site.` });
     if (!(await checkerPause(Math.round(rnd(lo, hi))))) return false;
   }
   siteVisits.set(host, seen + 1);
