@@ -22,10 +22,13 @@ export function checkerRoutes(pool) {
 
   r.post('/checker/result', async (req, res, next) => {
     try {
-      const { id, status, kind, result, results } = req.body || {};
+      const { id, status, kind, result, results, url } = req.body || {};
       if (!Number.isInteger(id) || !['checked', 'unreachable'].includes(status)) {
         return res.status(400).json({ error: 'bad id or status' });
       }
+      // The link may have been removed or edited while it was being visited: then this result is stale.
+      const [cur] = await pool.query('SELECT url FROM urls WHERE id = ?', [id]);
+      if (!cur.length || (url && cur[0].url !== url)) return res.json({ ok: true, ignored: true });
       await pool.query('UPDATE urls SET status = ?, kind = ? WHERE id = ?', [status, KINDS.includes(kind) ? kind : 'unknown', id]);
       // A list page can have several matching jobs; a re-check replaces the earlier ones.
       const list = Array.isArray(results) ? results : result ? [result] : [];
@@ -45,7 +48,11 @@ export function checkerRoutes(pool) {
   // Puts links back in the queue: only the ones that could not be read, or every checked link.
   r.post('/checker/requeue', async (req, res, next) => {
     try {
-      const which = (req.body || {}).which;
+      const { which, ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length) {
+        const [one] = await pool.query("UPDATE urls SET status = 'new' WHERE id IN (?) AND status <> 'new'", [ids]);
+        return res.json({ requeued: one.affectedRows });
+      }
       const [out] = await pool.query(
         which === 'unreachable' ? "UPDATE urls SET status = 'new' WHERE status = 'unreachable'" : "UPDATE urls SET status = 'new' WHERE status <> 'new'"
       );

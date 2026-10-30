@@ -334,6 +334,7 @@ async function refreshServer() {
   }
   routeSig = '';
   loadCountries();
+  loadLinks();
   renderCountry();
   renderOverview();
 }
@@ -354,6 +355,7 @@ function renderCountry() {
   $('chkStart').disabled = !leadKey || !server.ok || (!checker.running && (busy || !S.deepseekKey));
   $('geoExport').disabled = !server.ok;
   $('chkRetry').disabled = $('chkAgain').disabled = !server.ok || !!checker.running;
+  syncLinks();
   $('geoNote').textContent = !leadKey ? 'Save the server key in Settings.' : !S.deepseekKey ? 'Checking links needs a DeepSeek key.' : '';
   const day = (d) => (d && d.date === today() ? d.count : 0);
   $('limits').textContent = `Today: ${day(S.collectorDaily)} of 150 searches, ${day(S.checkerDaily)} of 300 link checks. Bangladesh, India, Pakistan and Afghanistan are skipped.`;
@@ -430,6 +432,116 @@ $('manualAdd').addEventListener('click', async () => {
     note.textContent = e instanceof ServerDown ? `${e.message} Start server/start.bat.` : e.message;
   }
 });
+
+// ---------- saved links ----------
+const links = { status: '', q: '', rows: [], total: 0, editing: null, scrolledTo: null, activeSeen: null };
+const STATUS_LABEL = { new: 'Waiting', checked: 'Checked', unreachable: 'Unreadable' };
+const activeId = () => (S.checker && S.checker.running && S.checker.currentId) || null;
+
+async function loadLinks(more = false) {
+  if ($('page-country').hidden || !server.ok) return;
+  if (links.editing !== null && !more) return; // never redraw under an open edit box
+  try {
+    const shown = links.rows.filter((r) => !r.pinned).length;
+    const limit = more ? 100 : Math.max(100, shown);
+    const pin = !more && activeId() ? `&pin=${activeId()}` : '';
+    const res = await serverFetch(`/links?status=${links.status}&q=${encodeURIComponent(links.q)}&limit=${limit}&offset=${more ? shown : 0}${pin}`);
+    links.total = res.total;
+    links.rows = more ? [...links.rows, ...res.rows] : res.rows;
+    renderLinks();
+  } catch { /* the server is off; the table keeps what it had */ }
+}
+
+// Called on every refresh: when the checker moves to another link, reload so that link is pinned and highlighted.
+function syncLinks() {
+  const now = activeId();
+  if (now !== links.activeSeen) {
+    links.activeSeen = now;
+    loadLinks();
+  }
+  renderLinks();
+}
+
+async function saveEdit(l, input, msg) {
+  try {
+    await serverFetch('/links/update', { id: l.id, url: input.value.trim() });
+    links.editing = null;
+    toast('Saved. This link will be checked again.');
+    await loadLinks();
+    refreshServer();
+  } catch (e) {
+    msg.textContent = e.message;
+  }
+}
+
+function renderLinks() {
+  const active = activeId();
+  const sig = JSON.stringify([links.rows, links.total, active, links.editing]);
+  const body = $('linkRows');
+  $('linksTotal').textContent = links.total ? `(${links.total})` : '';
+  $('linksMore').hidden = links.rows.filter((r) => !r.pinned).length >= links.total;
+  $('linksEmpty').hidden = links.rows.length > 0;
+  if (body.dataset.sig === sig) return;
+  body.dataset.sig = sig;
+  body.textContent = '';
+  let activeRow = null;
+  for (const l of links.rows) {
+    const isActive = l.id === active;
+    let linkCell;
+    if (links.editing === l.id) {
+      const input = el('input', { type: 'text', value: l.url, 'aria-label': 'Link address', class: 'editUrl', spellcheck: 'false' });
+      const msg = el('small', { class: 'err' });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveEdit(l, input, msg);
+        if (e.key === 'Escape') { links.editing = null; renderLinks(); }
+      });
+      linkCell = el('td', {}, input,
+        el('div', { class: 'editBtns' },
+          el('button', { class: 'btn primary mini', type: 'button', onclick: () => saveEdit(l, input, msg) }, 'Save'),
+          el('button', { class: 'btn quiet mini', type: 'button', onclick: () => { links.editing = null; renderLinks(); } }, 'Cancel'), msg));
+      setTimeout(() => input.focus(), 0);
+    } else {
+      linkCell = el('td', {}, el('a', { href: l.url, target: '_blank', rel: 'noreferrer', title: l.url }, shortUrl(l.url)));
+    }
+    const remove = el('button', { class: 'btn quiet mini danger', type: 'button' }, 'Remove');
+    armed(remove, 'Sure?', async () => {
+      try { await serverFetch('/links/remove', { id: l.id }); toast('Link removed.'); loadLinks(); refreshServer(); } catch (e) { toast(e.message); }
+    });
+    const row = el('tr', { class: isActive ? 'active' : '', 'aria-current': isActive ? 'true' : false },
+      linkCell,
+      el('td', { title: l.countries }, l.countries.length > 48 ? `${l.countries.slice(0, 46)}…` : l.countries || '–'),
+      el('td', {}, l.source === 'manual' ? 'Added by me' : l.source.replace(/^remote /, '') || '–'),
+      el('td', { class: 'status', 'data-s': isActive ? 'active' : l.status }, isActive ? 'Checking now' : STATUS_LABEL[l.status] || l.status),
+      el('td', {}, l.jobs ? String(l.jobs) : '–'),
+      el('td', { class: 'acts' },
+        el('button', { class: 'btn quiet mini', type: 'button', onclick: () => { links.editing = l.id; renderLinks(); } }, 'Edit'),
+        l.status !== 'new' && !isActive
+          ? el('button', { class: 'btn quiet mini', type: 'button', onclick: async () => { try { await serverFetch('/checker/requeue', { ids: [l.id] }); toast('It will be checked again.'); loadLinks(); } catch (e) { toast(e.message); } } }, 'Check again')
+          : '',
+        remove));
+    if (isActive) activeRow = row;
+    body.append(row);
+  }
+  // Bring the link being checked into view once, when it changes.
+  if (activeRow && links.scrolledTo !== active) {
+    links.scrolledTo = active;
+    activeRow.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+let linkTimer;
+$('linkFilter').addEventListener('input', (e) => {
+  clearTimeout(linkTimer);
+  linkTimer = setTimeout(() => { links.q = e.target.value.trim(); links.rows = []; links.editing = null; loadLinks(); }, 300);
+});
+document.querySelectorAll('.chips .chip').forEach((chip) => chip.addEventListener('click', () => {
+  document.querySelectorAll('.chips .chip').forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+  links.status = chip.dataset.status;
+  links.rows = [];
+  links.editing = null;
+  loadLinks();
+}));
+$('linksMore').addEventListener('click', () => loadLinks(true));
 
 // ---------- settings ----------
 let dsNotice = '';

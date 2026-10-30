@@ -114,3 +114,4 @@ test('requeue puts checked links back in the queue', async () => {
   assert.deepEqual(await call('/checker/requeue', { which: 'all' }), { requeued: 1 }); // the one still checked
   assert.equal((await call('/stats')).checked, 0);
 });
+

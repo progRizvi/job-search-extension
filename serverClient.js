@@ -18,6 +18,9 @@ async function serverFetch(path, body) {
     throw new ServerDown('The local server is not running.');
   }
   if (r.status === 401) throw new ServerDown('The server key is wrong.');
-  if (!r.ok) throw new Error(`Server error ${r.status}`);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(body.error || `Server error ${r.status}`);
+  }
   return r.json();
 }

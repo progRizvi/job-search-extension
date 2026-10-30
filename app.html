@@ -94,6 +94,26 @@
           <button id="manualAdd" class="btn" type="button">Add links</button>
           <span id="manualNote" class="note"></span>
         </div>
+        <h2>Saved links <span id="linksTotal" class="note"></span></h2>
+        <div class="bar">
+          <input id="linkFilter" type="search" placeholder="Filter by address" autocomplete="off" aria-label="Filter saved links">
+          <div class="chips" role="group" aria-label="Show links by status">
+            <button class="chip" type="button" data-status="" aria-pressed="true">All</button>
+            <button class="chip" type="button" data-status="new" aria-pressed="false">Waiting</button>
+            <button class="chip" type="button" data-status="checked" aria-pressed="false">Checked</button>
+            <button class="chip" type="button" data-status="unreachable" aria-pressed="false">Unreadable</button>
+            <button class="chip" type="button" data-status="manual" aria-pressed="false">Added by me</button>
+          </div>
+        </div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Link</th><th>Countries</th><th>Source</th><th>Status</th><th>Jobs</th><th><span class="sr">Actions</span></th></tr></thead>
+            <tbody id="linkRows"></tbody>
+          </table>
+          <p id="linksEmpty" class="empty" hidden>No links match.</p>
+        </div>
+        <div class="bar"><button id="linksMore" class="btn quiet" type="button" hidden>Show more</button></div>
+
         <h2>Matching jobs</h2>
         <div class="tableWrap">
           <table>

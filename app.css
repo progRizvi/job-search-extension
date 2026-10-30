@@ -171,3 +171,22 @@ textarea, select {
 }
 textarea { width: 100%; max-width: 640px; display: block; margin-bottom: 10px; resize: vertical; font-size: 13px; }
 select { min-width: 200px; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.mini { padding: 3px 9px; font-size: 12px; }
+td.status { white-space: nowrap; }
+td.status[data-s="new"] { color: var(--signal); }
+td.status[data-s="unreachable"] { color: var(--flag); }
+td.status[data-s="checked"] { color: var(--moss); }
+
+tr.active { background: color-mix(in srgb, var(--harbor) 12%, transparent); box-shadow: inset 4px 0 0 var(--harbor); }
+tr.active td.status { color: var(--harbor); font-weight: 600; }
+tr.active td.status::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--harbor); animation: nudge 1.4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { tr.active td.status::before { animation: none; } }
+td.acts { white-space: nowrap; }
+td.acts .btn { margin-left: 4px; }
+.editUrl { width: 100%; min-width: 280px; padding: 6px 10px; border: 1px solid var(--harbor); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.editBtns { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 var(--harbor); } 100% { box-shadow: 0 0 0 8px transparent; } }
+tr.active td.status::before { animation-name: ping; }

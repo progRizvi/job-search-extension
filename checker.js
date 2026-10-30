@@ -23,7 +23,7 @@ async function setChecker(patch) {
 }
 
 async function finishChecker(message, winId) {
-  await setChecker({ running: false, message, nextAt: null });
+  await setChecker({ running: false, message, nextAt: null, currentId: null });
   alertFinished(message);
   if (winId) chrome.windows.remove(winId).catch(() => {});
 }
@@ -229,15 +229,15 @@ async function checkLoop() {
         );
       }
 
-      await setChecker({ message: `Checking ${new URL(next.url).hostname}…` });
+      await setChecker({ message: `Checking ${new URL(next.url).hostname}…`, currentId: next.id });
       let out;
       try { out = await checkUrl(tabId, next); } catch { out = { status: 'unreachable', kind: 'unknown' }; }
-      await serverFetch('/checker/result', { id: next.id, ...out });
+      await serverFetch('/checker/result', { id: next.id, url: next.url, ...out }); // url lets the server drop a result for a link edited meanwhile
       await chrome.storage.local.set({ checkerDaily: { date: today(), count: used + 1 } });
       const found = (out.results || []).filter((r) => r.jobUrl).length;
       matches += found;
       done++;
-      await setChecker({ message: `${new URL(next.url).hostname}: ${out.status === 'unreachable' ? 'could not read the page' : found ? `${found} matching ${found === 1 ? 'job' : 'jobs'} found` : 'no matching job'}. ${done} checked, ${matches} matches.` });
+      await setChecker({ message: `${new URL(next.url).hostname}: ${out.status === 'unreachable' ? 'could not read the page' : found ? `${found} matching ${found === 1 ? 'job' : 'jobs'} found` : 'no matching job'}. ${done} checked, ${matches} matches.`, currentId: null });
       if (!(await checkerPause(Math.round(rnd(5, 12))))) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
     }
   } catch (e) {
