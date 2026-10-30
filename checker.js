@@ -26,6 +26,8 @@ async function setChecker(patch) {
 }
 
 async function finishChecker(message, winId) {
+  const { currentId } = await getChecker();
+  if (currentId) await serverFetch('/checker/release', { id: currentId }).catch(() => {}); // give the link back if the run ended early
   await setChecker({ running: false, message, nextAt: null, currentId: null });
   alertFinished(message);
   if (winId) chrome.windows.remove(winId).catch(() => {});
@@ -70,7 +72,7 @@ async function readJobText(windowId, url) {
   let tab;
   if (!(await restIfNeeded(hostOf(url)))) return '';
   try {
-    tab = await chrome.tabs.create({ windowId, url, active: true });
+    tab = await chrome.tabs.create({ windowId, url, active: false }); // never activate a tab: that can raise the window
     for (let i = 0; i < 30; i++) {
       await sleep(1000);
       const t = await chrome.tabs.get(tab.id);
@@ -147,7 +149,6 @@ async function walkList(listTab, page, item, country) {
       await sleep(rnd(600, 1500));
     }
     if (loads >= MAX_LOAD_MORE) break;
-    await chrome.tabs.update(listTab, { active: true });
     await setChecker({ message: `${host}: ${opened} jobs read, loading more…` });
     let more;
     try { more = await run(listTab, loadMoreJobs); } catch { break; }
@@ -261,7 +262,7 @@ async function checkLoop(onlyId = null) {
     if (!(await chrome.storage.local.get('deepseekKey')).deepseekKey) {
       return finishChecker('Stopped: save a DeepSeek key first. It decides which jobs are remote and open to the country.');
     }
-    const win = await chrome.windows.create({ url: 'about:blank', focused: false, type: 'normal', width: 1100, height: 800 });
+    const win = await createWorkWindow('about:blank', 1100, 800);
     winId = win.id;
     const tabId = win.tabs[0].id;
     let matches = 0;
@@ -288,7 +289,9 @@ async function checkLoop(onlyId = null) {
 
       await setChecker({ message: `Checking ${new URL(next.url).hostname}…`, currentId: next.id });
       let out;
-      try { out = await checkUrl(tabId, next); } catch { out = { status: 'unreachable', kind: 'unknown' }; }
+      // Tell the server this link is still being worked on, so another browser does not take it.
+      const beat = setInterval(() => serverFetch('/checker/heartbeat', { id: next.id }).catch(() => {}), 60000);
+      try { out = await checkUrl(tabId, next); } catch { out = { status: 'unreachable', kind: 'unknown' }; } finally { clearInterval(beat); }
       await serverFetch('/checker/result', { id: next.id, url: next.url, ...out }); // url lets the server drop a result for a link edited meanwhile
       await chrome.storage.local.set({ checkerDaily: { date: today(), count: used + 1 } });
       const found = (out.results || []).filter((r) => r.jobUrl).length;

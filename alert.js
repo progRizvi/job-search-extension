@@ -7,6 +7,16 @@ async function anyRunActive() {
   return !!(s.auto?.running || s.sites?.running || s.jobs?.running || s.collector?.running || s.checker?.running);
 }
 
+// The window the extension works in. By default it is minimized right after it opens, so it does not sit in front
+// of the user's own work (Chrome ignores state: 'minimized' when a window is created, so it is minimized by an update).
+// With workWindow = 'normal' it stays an ordinary window that was opened without focus.
+async function createWorkWindow(url, width = 1100, height = 800) {
+  const { workWindow = 'minimized' } = await chrome.storage.local.get('workWindow');
+  const win = await chrome.windows.create({ url, type: 'normal', focused: false, width, height });
+  if (workWindow === 'minimized') await chrome.windows.update(win.id, { state: 'minimized' }).catch(() => {});
+  return win;
+}
+
 async function ensureOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
   await chrome.offscreen.createDocument({
@@ -17,12 +27,13 @@ async function ensureOffscreen() {
 async function alertUser(title, message, windowId) {
   try { await ensureOffscreen(); await chrome.runtime.sendMessage({ type: 'beep' }); } catch { /* sound is a bonus */ }
   try { chrome.notifications.create({ type: 'basic', iconUrl: 'icons/icon128.png', title, message, priority: 2 }); } catch { /* ignore */ }
-  if (windowId) chrome.windows.update(windowId, { focused: true, drawAttention: true }).catch(() => {});
+  if (windowId) chrome.windows.update(windowId, { focused: true, drawAttention: true, state: 'normal' }).catch(() => {});
 }
 
 // Waits until isClear() returns true. Returns true when solved, false when the run was stopped or the wait timed out.
 async function waitForUser(tabId, isClear, what, limitMs = WAIT_LIMIT_MS) {
   const { windowId } = await chrome.tabs.get(tabId);
+  const before = await chrome.windows.get(windowId).catch(() => null);
   const t0 = Date.now();
   let lastAlert = 0;
   await chrome.storage.local.set({ waiting: { what, since: t0 } });
@@ -39,6 +50,8 @@ async function waitForUser(tabId, isClear, what, limitMs = WAIT_LIMIT_MS) {
     return false;
   } finally {
     await chrome.storage.local.remove('waiting');
+    // Put it away again if it was minimized before the captcha brought it forward.
+    if (before && before.state === 'minimized') chrome.windows.update(windowId, { state: 'minimized' }).catch(() => {});
   }
 }
 

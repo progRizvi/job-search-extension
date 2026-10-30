@@ -25,7 +25,7 @@ test('saved links list: filter by status and text, counts jobs, remove and reque
   const a = await call('/collector/next');
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://alpha.com/jobs', 'https://beta.com/jobs'] });
   await call('/links', { urls: ['https://gamma.com/jobs'] });
-  const first = await call('/checker/next'); // the manual one comes first
+  const first = await call('/checker/next?peek=1'); // the manual one comes first
   await call('/checker/result', { id: first.id, url: first.url, status: 'checked', kind: 'board', results: [
     { jobTitle: 'A', jobUrl: 'https://gamma.com/jobs/1', workType: 'remote', remoteScope: 'worldwide', fit: 'good' },
     { jobTitle: 'B', jobUrl: 'https://gamma.com/jobs/2', workType: 'remote', remoteScope: 'worldwide', fit: 'good' }] });
@@ -48,7 +48,7 @@ test('saved links list: filter by status and text, counts jobs, remove and reque
 test('a link can be edited (re-queued, old jobs dropped), duplicates are refused, and stale results are ignored', async () => {
   const a = await call('/collector/next');
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://old.com/jobs', 'https://other.com/jobs'] });
-  const next = await call('/checker/next');
+  const next = await call('/checker/next?peek=1');
   await call('/checker/result', { id: next.id, url: next.url, status: 'checked', kind: 'board', results: [{ jobTitle: 'A', jobUrl: 'https://old.com/jobs/1', workType: 'remote', remoteScope: 'worldwide', fit: 'good' }] });
   assert.deepEqual(await call('/links/update', { id: next.id, url: 'https://NEW.com/jobs/?utm_a=1' }), { updated: 1 });
   const row = (await call('/links?q=new.com')).rows[0];
@@ -68,7 +68,7 @@ test('a link can be edited (re-queued, old jobs dropped), duplicates are refused
 test('the link being checked can be pinned to the top of the list', async () => {
   const a = await call('/collector/next');
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://p1.com', 'https://p2.com', 'https://p3.com'] });
-  const first = await call('/checker/next');
+  const first = await call('/checker/next?peek=1');
   const res = await call(`/links?limit=1&pin=${first.id}`);
   assert.equal(res.rows[0].id, first.id);
   assert.equal(res.rows[0].pinned, true);
@@ -77,7 +77,7 @@ test('the link being checked can be pinned to the top of the list', async () => 
 test('one link can be fetched by id for a single check, even when it is already checked', async () => {
   const a = await call('/collector/next');
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://one.com/jobs', 'https://two.com/jobs'] });
-  const first = await call('/checker/next');
+  const first = await call('/checker/next?peek=1');
   await call('/checker/result', { id: first.id, url: first.url, status: 'checked', kind: 'board' });
   const item = await call(`/checker/item?id=${first.id}`);
   assert.deepEqual([item.id, item.url, item.countries], [first.id, first.url, [a.country.name]]);

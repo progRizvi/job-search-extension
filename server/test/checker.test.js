@@ -41,13 +41,13 @@ test('remoteMatches follows the remote scope rules', () => {
 test('checker returns the oldest new url with its countries, and a result marks it checked', async () => {
   const fr = await call('/collector/next');
   await call('/collector/results', { countryCode: fr.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://a.com/jobs', 'https://b.com/jobs'] });
-  const next = await call('/checker/next');
+  const next = await call('/checker/next?peek=1');
   assert.equal(next.url, 'https://a.com/jobs');
   assert.deepEqual(next.countries, [fr.country.name]);
   await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', result: { careersUrl: 'https://a.com/jobs', openings: 'yes', jobTitle: 'Node Developer', jobUrl: 'https://a.com/jobs/1', workType: 'remote', remoteScope: 'worldwide', fit: 'good', stack: 'node', checkedBy: 'DeepSeek' } });
-  assert.equal((await call('/checker/next')).url, 'https://b.com/jobs');
-  await call('/checker/result', { id: (await call('/checker/next')).id, status: 'unreachable', kind: 'unknown' });
-  assert.deepEqual(await call('/checker/next'), { done: true });
+  assert.equal((await call('/checker/next?peek=1')).url, 'https://b.com/jobs');
+  await call('/checker/result', { id: (await call('/checker/next?peek=1')).id, status: 'unreachable', kind: 'unknown' });
+  assert.deepEqual(await call('/checker/next?peek=1'), { done: true });
   const [[row]] = await pool.query('SELECT job_title, remote_scope FROM job_results WHERE url_id = ?', [next.id]);
   assert.deepEqual([row.job_title, row.remote_scope], ['Node Developer', 'worldwide']);
 });
@@ -58,7 +58,7 @@ test('export returns one row per url and country with the job fields filled', as
   await pool.query("UPDATE countries SET status='done' WHERE code=?", [a.country.code]);
   const b = await call('/collector/next');
   await call('/collector/results', { countryCode: b.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://a.com/jobs'] });
-  const next = await call('/checker/next');
+  const next = await call('/checker/next?peek=1');
   await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', result: { careersUrl: 'https://a.com/jobs', openings: 'yes', jobTitle: 'Node Dev', jobUrl: 'https://a.com/jobs/1', workType: 'remote', remoteScope: 'worldwide', fit: 'good', stack: 'node', checkedBy: 'DeepSeek' } });
   const { rows } = await call('/export');
   assert.equal(rows.length, 2);
@@ -72,12 +72,12 @@ test('manual links: added with a country, re-queued when already checked, and ch
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://searched.com/jobs'] });
   const r = await call('/links', { countryCode: a.country.code, urls: ['https://www.ycombinator.com/jobs/role/software-engineer?utm_x=1', 'not a url', 'https://www.indeed.com/q-node-jobs.html'] });
   assert.deepEqual([r.added, r.requeued, r.invalid], [2, 0, 1]);
-  assert.equal((await call('/checker/next')).url, 'https://www.ycombinator.com/jobs/role/software-engineer'); // manual first
-  const first = await call('/checker/next');
+  assert.equal((await call('/checker/next?peek=1')).url, 'https://www.ycombinator.com/jobs/role/software-engineer'); // manual first
+  const first = await call('/checker/next?peek=1');
   await call('/checker/result', { id: first.id, status: 'checked', kind: 'board' });
   const again = await call('/links', { countryCode: a.country.code, urls: ['https://www.ycombinator.com/jobs/role/software-engineer'] });
   assert.deepEqual([again.added, again.requeued], [0, 1]); // an already-checked link is queued for another check
-  assert.equal((await call('/checker/next')).url, 'https://www.ycombinator.com/jobs/role/software-engineer');
+  assert.equal((await call('/checker/next?peek=1')).url, 'https://www.ycombinator.com/jobs/role/software-engineer');
 });
 
 test('Anywhere is offered for manual links but is not counted as a country', async () => {
@@ -88,13 +88,13 @@ test('Anywhere is offered for manual links but is not counted as a country', asy
   assert.equal(stats.countriesTotal, 198);
   const r = await call('/links', { urls: ['https://remoteok.com/remote-node-jobs'] }); // no country means Anywhere
   assert.equal(r.added, 1);
-  assert.deepEqual((await call('/checker/next')).countries, ['Anywhere']);
+  assert.deepEqual((await call('/checker/next?peek=1')).countries, ['Anywhere']);
 });
 
 test('a list page can save several matching jobs, and a re-check replaces them', async () => {
   const a = await call('/collector/next');
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://board.com/list'] });
-  const next = await call('/checker/next');
+  const next = await call('/checker/next?peek=1');
   const job = (n) => ({ careersUrl: 'https://board.com/list', openings: 'yes', jobTitle: `Node Dev ${n}`, jobUrl: `https://board.com/job/${n}`, workType: 'remote', remoteScope: 'worldwide', fit: 'good', stack: 'node', checkedBy: 'DeepSeek' });
   await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', results: [job(1), job(2), job(3)] });
   assert.equal((await call('/export')).rows.length, 3);
@@ -106,9 +106,9 @@ test('a list page can save several matching jobs, and a re-check replaces them',
 test('requeue puts checked links back in the queue', async () => {
   const a = await call('/collector/next');
   await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://x.com/1', 'https://x.com/2', 'https://x.com/3'] });
-  const one = await call('/checker/next');
+  const one = await call('/checker/next?peek=1');
   await call('/checker/result', { id: one.id, status: 'checked', kind: 'board' });
-  const two = await call('/checker/next');
+  const two = await call('/checker/next?peek=1');
   await call('/checker/result', { id: two.id, status: 'unreachable', kind: 'unknown' });
   assert.deepEqual(await call('/checker/requeue', { which: 'unreachable' }), { requeued: 1 });
   assert.deepEqual(await call('/checker/requeue', { which: 'all' }), { requeued: 1 }); // the one still checked

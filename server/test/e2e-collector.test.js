@@ -23,7 +23,7 @@ function load(searchWebBody, address) {
   ctx = vm.createContext({ chrome, fetch, URL, console, JSON, Date, Math, globalThis: null, LEAD_SERVER: address || `http://127.0.0.1:${server.address().port}` });
   ctx.globalThis = ctx;
   vm.runInContext(
-    `const sleep = () => Promise.resolve(); const rnd = (a) => a; let googleBlocked = false; const alertFinished = async () => {}; const holdIfPaused = async () => true;
+    `const sleep = () => Promise.resolve(); const rnd = (a) => a; let googleBlocked = false; const alertFinished = async () => {}; const holdIfPaused = async () => true; const createWorkWindow = (url) => chrome.windows.create({ url });
      const today = () => '2026-10-30'; ${searchWebBody}`, ctx);
   for (const f of ['../../serverClient.js', '../../collector.js']) vm.runInContext(readFileSync(new URL(f, import.meta.url), 'utf8'), ctx);
 }

@@ -246,7 +246,7 @@ async function findSitesLoop(recheck = false, ids = null) {
     let cleared = 0;
     let unanswered = 0;
 
-    const win = await chrome.windows.create({ url: 'https://www.google.com/', focused: false, type: 'normal', width: 1000, height: 760 });
+    const win = await createWorkWindow('https://www.google.com/', 1000, 760);
     winId = win.id;
     const tabId = win.tabs[0].id;
     const stillRunning = async () => (await getSites()).running;
@@ -614,7 +614,7 @@ async function findJobsLoop() {
     const todo = Object.values((await load()).companies).filter((c) => c.website && !c.jobsChecked);
     if (!todo.length) return finishJobs('Done: no companies with a website left to check.');
 
-    const win = await chrome.windows.create({ url: todo[0].website, focused: false, type: 'normal', width: 1100, height: 800 });
+    const win = await createWorkWindow(todo[0].website, 1100, 800);
     winId = win.id;
     const tabId = win.tabs[0].id;
     const stillRunning = async () => (await getJobs()).running;

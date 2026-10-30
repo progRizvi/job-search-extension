@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const PAGES = ['overview', 'companies', 'country', 'settings'];
-const KEYS = ['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting', 'paused', 'leadKey', 'deepseekKey', 'deepseekError', 'dsStats', 'lastUrl', 'visited', 'collectorDaily', 'checkerDaily'];
+const KEYS = ['auto', 'sites', 'jobs', 'collector', 'checker', 'waiting', 'paused', 'workWindow', 'leadKey', 'deepseekKey', 'deepseekError', 'dsStats', 'lastUrl', 'visited', 'collectorDaily', 'checkerDaily'];
 
 let S = {}; // everything read from storage on the last refresh
 let server = { ok: false, error: 'Checking…', stats: null, matches: [] };
@@ -546,7 +546,7 @@ function renderLinks() {
       linkCell,
       el('td', { title: l.countries }, l.countries.length > 48 ? `${l.countries.slice(0, 46)}…` : l.countries || '–'),
       el('td', {}, l.source === 'manual' ? 'Added by me' : l.source.replace(/^remote /, '') || '–'),
-      el('td', { class: 'status', 'data-s': isActive ? 'active' : l.status }, isActive ? 'Checking now' : l.status === 'new' && l.jobs ? 'Queued to re-check' : STATUS_LABEL[l.status] || l.status),
+      el('td', { class: 'status', 'data-s': isActive || l.checking ? 'active' : l.status }, isActive ? 'Checking now' : l.checking ? 'Being checked' : l.status === 'new' && l.jobs ? 'Queued to re-check' : STATUS_LABEL[l.status] || l.status),
       el('td', { title: l.status === 'new' && l.jobs ? 'From the last check. They are replaced when the re-check finishes. Press Check saved links to run it.' : '' }, l.jobs ? String(l.jobs) : '–'),
       el('td', { class: 'acts' },
         el('button', { class: 'btn quiet mini', type: 'button', onclick: () => { links.editing = l.id; renderLinks(); } }, 'Edit'),
@@ -588,6 +588,7 @@ function renderSettings() {
   ds.className = `note${S.deepseekError ? ' err' : ''}`;
   ds.textContent = dsNotice || S.deepseekError || (S.deepseekKey ? `Key saved. DeepSeek is on. ${used} ${used === 1 ? 'request' : 'requests'} today.` : 'Off. The built-in matching is used.');
   $('dsKey').placeholder = S.deepseekKey ? 'Key saved. Paste a new one to replace it.' : 'Paste your API key';
+  if (document.activeElement !== $('workWindow')) $('workWindow').value = S.workWindow || 'minimized';
   $('leadKey').placeholder = S.leadKey ? 'Key saved. Paste a new one to replace it.' : 'Paste the server key';
   $('leadStatus').textContent = server.ok ? 'Server connected.' : S.leadKey ? `${server.error} Start server/start.bat.` : 'No key saved yet.';
   $('leadStatus').className = `note${!server.ok && S.leadKey ? ' err' : ''}`;
@@ -614,6 +615,7 @@ $('dsTest').addEventListener('click', async () => {
   refresh();
 });
 $('dsRemove').addEventListener('click', async () => { await chrome.storage.local.remove(['deepseekKey', 'deepseekError']); refresh(); });
+$('workWindow').addEventListener('change', (e) => chrome.storage.local.set({ workWindow: e.target.value }));
 $('leadSave').addEventListener('click', async () => {
   const key = $('leadKey').value.trim();
   if (!key) return;

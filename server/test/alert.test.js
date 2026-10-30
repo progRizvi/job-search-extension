@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 
-function load(running = true) {
-  const calls = { beep: 0, notify: 0, focus: 0 };
+function load(running = true, winState = 'normal') {
+  const calls = { beep: 0, notify: 0, focus: 0, updates: [] };
   const store = { collector: { running } };
   const chrome = {
     storage: { local: {
@@ -13,7 +13,7 @@ function load(running = true) {
       remove: async (k) => { delete store[k]; },
     } },
     tabs: { get: async () => ({ windowId: 7 }) },
-    windows: { update: async () => { calls.focus++; } },
+    windows: { get: async () => ({ state: winState }), update: async (id, o) => { calls.focus++; calls.updates.push(o); } },
     notifications: { create: () => { calls.notify++; } },
     offscreen: { hasDocument: async () => true },
     runtime: { sendMessage: async () => { calls.beep++; } },
@@ -72,4 +72,27 @@ test('a run that ends is no longer paused', async () => {
   store.paused = true;
   await vm.runInContext('alertFinished("Stopped by you.")', ctx);
   assert.equal(store.paused, undefined);
+});
+
+test('a minimized window is brought forward for a captcha and put away again afterwards', async () => {
+  const { ctx, calls } = load(true, 'minimized');
+  let n = 0;
+  ctx.isClear = async () => ++n >= 2;
+  assert.equal(await vm.runInContext('waitForUser(1, isClear, "Bing is asking for a check.")', ctx), true);
+  assert.equal(calls.updates[0].state, 'normal');           // shown so the user can solve it
+  assert.equal(calls.updates.at(-1).state, 'minimized');    // and minimized again once solved
+});
+
+test('createWorkWindow opens without focus and minimizes by default, or stays normal when asked', async () => {
+  const { ctx, calls } = load();
+  const made = [];
+  ctx.chrome.windows.create = async (o) => { made.push(o); return { id: 9, tabs: [{ id: 1 }] }; };
+  await vm.runInContext('createWorkWindow("https://x.test")', ctx);
+  assert.equal(made[0].focused, false);
+  assert.equal(calls.updates.at(-1).state, 'minimized');
+  const updatesBefore = calls.updates.length;
+  ctx.chrome.storage.local.set({ workWindow: 'normal' });
+  await vm.runInContext('createWorkWindow("https://x.test", 1000, 700)', ctx);
+  assert.deepEqual([made[1].focused, made[1].width], [false, 1000]);
+  assert.equal(calls.updates.length, updatesBefore); // left as a normal window
 });

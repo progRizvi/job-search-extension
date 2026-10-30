@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS urls (
   engine VARCHAR(20),
   first_query VARCHAR(255),
   found_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  claimed_at TIMESTAMP NULL DEFAULT NULL,
   KEY idx_status (status, id)
 );
 CREATE TABLE IF NOT EXISTS url_countries (

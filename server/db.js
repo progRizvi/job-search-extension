@@ -10,6 +10,11 @@ export function makePool(database = process.env.MYSQL_DATABASE) {
 
 export async function migrate(pool) {
   await pool.query(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+  // Older databases have no claim marker on links.
+  const [claim] = await pool.query(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'urls' AND COLUMN_NAME = 'claimed_at'"
+  );
+  if (!claim.length) await pool.query('ALTER TABLE urls ADD COLUMN claimed_at TIMESTAMP NULL DEFAULT NULL');
   // Older databases kept one job per link (url_id was the key). Move them to one row per job.
   const [cols] = await pool.query(
     "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_results' AND COLUMN_NAME = 'job_hash'"

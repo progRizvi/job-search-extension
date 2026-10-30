@@ -40,7 +40,7 @@ async function collectLoop() {
   let winId;
   googleBlocked = false;
   try {
-    const win = await chrome.windows.create({ url: 'https://www.bing.com/', focused: false, type: 'normal', width: 1000, height: 760 });
+    const win = await createWorkWindow('https://www.bing.com/', 1000, 760);
     winId = win.id;
     const tabId = win.tabs[0].id;
     for (;;) {

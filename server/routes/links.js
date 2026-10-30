@@ -11,7 +11,8 @@ export async function ensureAnywhere(pool) {
 
 const LINK_SELECT = `SELECT u.id, u.url, u.status, u.kind, u.first_query, u.engine, u.found_at,
        (SELECT GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') FROM url_countries uc JOIN countries c ON c.code = uc.country_code WHERE uc.url_id = u.id) AS countries,
-       (SELECT COUNT(*) FROM job_results j WHERE j.url_id = u.id AND j.job_url IS NOT NULL) AS jobs
+       (SELECT COUNT(*) FROM job_results j WHERE j.url_id = u.id AND j.job_url IS NOT NULL) AS jobs,
+       (u.status = 'new' AND u.claimed_at IS NOT NULL AND u.claimed_at >= NOW() - INTERVAL 10 MINUTE) AS checking
   FROM urls u`;
 
 export function linksRoutes(pool) {
@@ -38,7 +39,7 @@ export function linksRoutes(pool) {
       const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
       const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM urls u ${w}`, args);
       const [rows] = await pool.query(`${LINK_SELECT} ${w} ORDER BY u.id DESC LIMIT ? OFFSET ?`, [...args, limit, offset]);
-      const shape = (x, pinned = false) => ({ id: x.id, url: x.url, status: x.status, kind: x.kind, source: x.first_query === 'manual' ? 'manual' : x.first_query || '', engine: x.engine || '', foundAt: x.found_at, countries: x.countries || '', jobs: Number(x.jobs), pinned });
+      const shape = (x, pinned = false) => ({ id: x.id, url: x.url, status: x.status, kind: x.kind, source: x.first_query === 'manual' ? 'manual' : x.first_query || '', engine: x.engine || '', foundAt: x.found_at, countries: x.countries || '', jobs: Number(x.jobs), checking: !!x.checking, pinned });
       const out = rows.map((x) => shape(x));
       // The link being checked is always shown at the top, even when a filter or the page size would hide it.
       const pin = Number(req.query.pin);
