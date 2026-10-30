@@ -19,6 +19,7 @@ async function setChecker(patch) {
 
 async function finishChecker(message, winId) {
   await setChecker({ running: false, message, nextAt: null });
+  alertFinished(message);
   if (winId) chrome.windows.remove(winId).catch(() => {});
 }
 

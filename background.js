@@ -20,6 +20,7 @@ async function setAuto(patch) {
 
 async function stop(message) {
   await setAuto({ running: false, message, nextAt: null });
+  alertFinished(message);
   if (/^Done/.test(message)) await downloadExcel();
 }
 
@@ -182,6 +183,7 @@ async function updateCompany(url, patch) {
 async function finishSites(message, winId) {
   await setSites({ running: false });
   await setAuto({ message, nextAt: null });
+  alertFinished(message);
   if (winId) chrome.windows.remove(winId).catch(() => {});
 }
 
@@ -386,6 +388,7 @@ async function setJobs(patch) {
 async function finishJobs(message, winId) {
   await setJobs({ running: false });
   await setAuto({ message, nextAt: null });
+  alertFinished(message);
   if (winId) chrome.windows.remove(winId).catch(() => {});
 }
 

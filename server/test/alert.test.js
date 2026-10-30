@@ -44,3 +44,11 @@ test('waitForUser times out', async () => {
   ctx.isClear = async () => false;
   assert.equal(await vm.runInContext('waitForUser(1, isClear, "x", 50)', ctx), false);
 });
+
+test('alertFinished announces Done and errors, but not the user pressing Stop', async () => {
+  const { ctx, calls } = load();
+  for (const m of ['Done: 5 found.', 'Stopped: the local server is not running.', 'Stopped by you. 2 found.', '']) {
+    await vm.runInContext(`alertFinished(${JSON.stringify(m)})`, ctx);
+  }
+  assert.deepEqual([calls.beep, calls.notify], [2, 2]);
+});

@@ -41,3 +41,10 @@ async function waitForUser(tabId, isClear, what, limitMs = WAIT_LIMIT_MS) {
     await chrome.storage.local.remove('waiting');
   }
 }
+
+// Tells the user a run ended: finished, or stopped by an error. Their own Stop press is not announced.
+async function alertFinished(message) {
+  if (!message || /^Stopped by you/.test(message)) return;
+  const done = /^Done/.test(message);
+  await alertUser(done ? 'Task complete' : 'Run stopped', message);
+}

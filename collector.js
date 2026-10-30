@@ -16,6 +16,7 @@ async function setCollector(patch) {
 
 async function finishCollector(message, winId) {
   await setCollector({ running: false, message, nextAt: null });
+  alertFinished(message);
   if (winId) chrome.windows.remove(winId).catch(() => {});
 }
 
