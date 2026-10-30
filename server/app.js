@@ -18,9 +18,9 @@ export function createApp(pool, { key } = {}) {
   app.get('/stats', async (req, res, next) => {
     try {
       const [[c]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='done') AS done FROM countries WHERE code <> 'ZZ'");
-      const [[u]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='checked') AS checked FROM urls");
+      const [[u]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='checked') AS checked, SUM(status='new') AS waiting FROM urls");
       const [[m]] = await pool.query('SELECT COUNT(*) AS n FROM job_results WHERE job_url IS NOT NULL');
-      res.json({ countriesTotal: Number(c?.n || 0), countriesDone: Number(c?.done || 0), urls: Number(u?.n || 0), checked: Number(u?.checked || 0), matches: Number(m?.n || 0) });
+      res.json({ countriesTotal: Number(c?.n || 0), countriesDone: Number(c?.done || 0), urls: Number(u?.n || 0), checked: Number(u?.checked || 0), matches: Number(m?.n || 0), waiting: Number(u?.waiting || 0) });
     } catch (e) { next(e); }
   });
   app.use((err, req, res, next) => res.status(500).json({ error: err.message }));

@@ -121,8 +121,9 @@ function renderNow() {
   stop.hidden = true;
   const last = [S.auto, S.collector, S.checker].map((r) => r && r.message).filter(Boolean).pop() || '';
   now.dataset.s = /^Stopped:/.test(last) ? 'error' : 'idle';
+  const waiting = server.stats ? server.stats.waiting : 0;
   $('nowTitle').textContent = 'Idle';
-  $('nowMsg').textContent = last;
+  $('nowMsg').textContent = waiting ? `${waiting} ${waiting === 1 ? 'link is' : 'links are'} queued to check. Nothing is running. Press Check saved links on the Country search page.` : last;
 }
 
 // ---------- overview: two routes ----------
@@ -352,6 +353,7 @@ function renderCountry() {
   $('geoStart').textContent = collector.running ? 'Stop country search' : 'Start country search';
   $('geoStart').disabled = !leadKey || !server.ok || (!collector.running && busy);
   $('chkStart').textContent = checker.running ? 'Stop checking' : 'Check saved links';
+  $('chkStart').classList.toggle('primary', !!(st && st.waiting) && !checker.running);
   $('chkStart').disabled = !leadKey || !server.ok || (!checker.running && (busy || !S.deepseekKey));
   $('geoExport').disabled = !server.ok;
   $('chkRetry').disabled = $('chkAgain').disabled = !server.ok || !!checker.running;
@@ -435,7 +437,7 @@ $('manualAdd').addEventListener('click', async () => {
 
 // ---------- saved links ----------
 const links = { status: '', q: '', rows: [], total: 0, editing: null, scrolledTo: null, activeSeen: null };
-const STATUS_LABEL = { new: 'Waiting', checked: 'Checked', unreachable: 'Unreadable' };
+const STATUS_LABEL = { new: 'Not checked yet', checked: 'Checked', unreachable: 'Unreadable' };
 const activeId = () => (S.checker && S.checker.running && S.checker.currentId) || null;
 
 async function loadLinks(more = false) {
@@ -511,8 +513,8 @@ function renderLinks() {
       linkCell,
       el('td', { title: l.countries }, l.countries.length > 48 ? `${l.countries.slice(0, 46)}…` : l.countries || '–'),
       el('td', {}, l.source === 'manual' ? 'Added by me' : l.source.replace(/^remote /, '') || '–'),
-      el('td', { class: 'status', 'data-s': isActive ? 'active' : l.status }, isActive ? 'Checking now' : l.status === 'new' && l.jobs ? 'Waiting to re-check' : STATUS_LABEL[l.status] || l.status),
-      el('td', { title: l.status === 'new' && l.jobs ? 'From the last check. They are replaced when the re-check finishes.' : '' }, l.jobs ? String(l.jobs) : '–'),
+      el('td', { class: 'status', 'data-s': isActive ? 'active' : l.status }, isActive ? 'Checking now' : l.status === 'new' && l.jobs ? 'Queued to re-check' : STATUS_LABEL[l.status] || l.status),
+      el('td', { title: l.status === 'new' && l.jobs ? 'From the last check. They are replaced when the re-check finishes. Press Check saved links to run it.' : '' }, l.jobs ? String(l.jobs) : '–'),
       el('td', { class: 'acts' },
         el('button', { class: 'btn quiet mini', type: 'button', onclick: () => { links.editing = l.id; renderLinks(); } }, 'Edit'),
         l.status !== 'new' && !isActive
