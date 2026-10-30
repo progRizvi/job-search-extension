@@ -91,15 +91,16 @@ async function walkList(listTab, jobTab, page, item, country) {
   const strict = [];
   const unstated = [];
   const seen = new Set();
-  const known = new Set(page.titles.map((t) => t.url));
+  const keyOf = (t) => t.key || t.url; // one entry per job, however many addresses it has
+  const known = new Set(page.titles.map(keyOf));
   let cards = page.titles;
   let opened = 0;
   let loads = 0;
   for (;;) {
     for (const card of cards) {
-      if (seen.has(card.url)) continue;
+      if (seen.has(keyOf(card))) continue;
       if (opened >= MAX_JOBS_PER_LINK || !(await getChecker()).running) return { strict, unstated, opened };
-      seen.add(card.url);
+      seen.add(keyOf(card));
       opened++;
       await setChecker({ message: `${host}: reading job ${opened} (${known.size} found so far)…` });
       const text = await readJobText(jobTab, card.url);
@@ -120,8 +121,8 @@ async function walkList(listTab, jobTab, page, item, country) {
     } else if (!more.clicked) break;
     let again;
     try { again = await run(listTab, analyzeJobsPage); } catch { break; }
-    cards = again.titles.filter((t) => !seen.has(t.url));
-    again.titles.forEach((t) => known.add(t.url));
+    cards = again.titles.filter((t) => !seen.has(keyOf(t)));
+    again.titles.forEach((t) => known.add(keyOf(t)));
     if (!cards.length) break;
   }
   return { strict, unstated, opened };

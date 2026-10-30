@@ -250,6 +250,19 @@ async function analyzeJobsPage() {
     return (n.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 260);
   };
 
+  // A job is identified by its address plus the id parameter, never by tracking parameters:
+  // the same job often appears under several slightly different addresses on one page.
+  const ID_PARAMS = ['jl', 'jk', 'vjk', 'id', 'jid', 'gh_jid', 'jobid', 'job'];
+  const jobKey = (u) => {
+    const ids = ID_PARAMS.filter((k) => u.searchParams.has(k)).map((k) => `${k}=${u.searchParams.get(k)}`).join('&');
+    return u.origin + u.pathname + (ids ? `?${ids}` : '');
+  };
+  // Pages that list jobs rather than being one ("java developer jobs in Remote", search results, reviews...).
+  const SEARCHLIKE = /SRCH_|[?&](q|query|keywords?|search)=|\/(search|browse|reviews|salaries|interviews)(\/|$)/i;
+  // Addresses that are unmistakably one job. When the page has any, nothing weaker is accepted.
+  const STRONG_URL = /\/job-listing\/|\/viewjob|\/rc\/clk|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|workatastartup\.com\/jobs\/|greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|myworkdayjobs\.com|recruitee\.com|breezy\.hr|jobvite\.com|teamtailor\.com|personio/i;
+  const here = location.href.split('#')[0];
+
   const jobs = new Map();
   for (const a of document.querySelectorAll('a[href]')) {
     // A job card often holds title, team and "Apply" on separate lines; the title is the first.
@@ -259,9 +272,12 @@ async function analyzeJobsPage() {
     try { u = new URL(a.href); } catch { continue; }
     if (!/^https?:$/.test(u.protocol) || !JOBLINK.test(u.hostname + u.pathname)) continue;
     const url = u.href.split('#')[0];
-    if (!jobs.has(url)) jobs.set(url, { title, text: cardText(a) });
+    if (url === here || SEARCHLIKE.test(url)) continue; // the list itself, or another list of jobs: not a job
+    const key = jobKey(u);
+    if (!jobs.has(key)) jobs.set(key, { url, key, title, text: cardText(a) });
   }
-  const all = [...jobs].map(([url, v]) => ({ url, title: v.title, text: v.text }));
+  let all = [...jobs.values()];
+  if (all.some((j) => STRONG_URL.test(j.url))) all = all.filter((j) => STRONG_URL.test(j.url));
 
   // Landing pages ("Work with us") often hide the job list one click deeper: "View open jobs".
   const LIST = /\b(view|see|browse|explore|search|all)\b.{0,12}\b(open )?(jobs|positions|roles|openings|vacancies)\b|current (openings|vacancies|jobs)|open (positions|roles|jobs)/i;
