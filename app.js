@@ -378,6 +378,9 @@ function renderCountry() {
   const day = (d) => (d && d.date === today() ? d.count : 0);
   $('limits').textContent = `Today: ${day(S.collectorDaily)} of 150 searches, ${day(S.checkerDaily)} of 300 link checks. Bangladesh, India, Pakistan and Afghanistan are skipped.`;
 
+  const total = server.matches.length;
+  $('matchTotal').textContent = total ? (total > 200 ? `(${total}, showing the first 200)` : `(${total})`) : '';
+  $('matchExport').disabled = !server.ok || !total;
   const body = $('matchRows');
   const sig = JSON.stringify(server.matches.map((m) => m.jobUrl + m.country));
   if (body.dataset.sig !== sig) {
@@ -406,6 +409,20 @@ async function exportLeads() {
   } catch (e) { toast(e.message); }
 }
 $('geoExport').addEventListener('click', exportLeads);
+
+// Only the jobs that matched, one row per job and country, with where it was found.
+async function exportMatches() {
+  try {
+    const { rows } = await serverFetch('/export');
+    const jobs = rows.filter((r) => r.jobUrl);
+    if (!jobs.length) return toast('No matching jobs yet.');
+    const header = ['Country', 'Job Title', 'Job URL', 'Remote Scope', 'Work Type', 'Fit', 'Stack', 'Found On', 'Site'];
+    const data = [header, ...jobs.map((r) => [r.country, r.jobTitle, r.jobUrl, r.remoteScope, r.workType, r.fit, r.stack, r.url, host(r.jobUrl)])];
+    download(buildXlsx(data), `matching-jobs-${today()}.xlsx`);
+    toast(`Saved ${jobs.length} matching ${jobs.length === 1 ? 'job' : 'jobs'} to your Downloads folder.`);
+  } catch (e) { toast(e.message); }
+}
+$('matchExport').addEventListener('click', exportMatches);
 
 async function requeue(which) {
   try {

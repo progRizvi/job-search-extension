@@ -115,7 +115,11 @@
         </div>
         <div class="bar"><button id="linksMore" class="btn quiet" type="button" hidden>Show more</button></div>
 
-        <h2>Matching jobs</h2>
+        <div class="bar headBar">
+          <h2>Matching jobs <span id="matchTotal" class="note"></span></h2>
+          <span class="grow"></span>
+          <button id="matchExport" class="btn" type="button" disabled>Export matching jobs</button>
+        </div>
         <div class="tableWrap">
           <table>
             <thead><tr><th>Country</th><th>Job</th><th>Remote scope</th><th>Fit</th><th>Stack</th></tr></thead>

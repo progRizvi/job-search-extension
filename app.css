@@ -190,3 +190,6 @@ td.acts .btn { margin-left: 4px; }
 .editBtns { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 @keyframes ping { 0% { box-shadow: 0 0 0 0 var(--harbor); } 100% { box-shadow: 0 0 0 8px transparent; } }
 tr.active td.status::before { animation-name: ping; }
+
+.headBar { margin-top: 28px; }
+.headBar h2 { margin: 0; }
