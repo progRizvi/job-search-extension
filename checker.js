@@ -41,16 +41,22 @@ async function checkerPause(sec) {
 
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
-// Opens one job in the job tab and returns its text ('' when it cannot be read). Waits for the user on a captcha.
-async function readJobText(jobTab, url) {
+// Opens one job in a brand-new tab, reads it, and closes the tab, so nothing from the previous job can linger.
+// Returns the job's text, or '' when it cannot be read. Waits for the user on a captcha.
+async function readJobText(windowId, url) {
+  let tab;
   try {
-    await chrome.tabs.update(jobTab, { active: true });
-    await openPage(jobTab, url);
-    let page = await run(jobTab, readJobPage);
+    tab = await chrome.tabs.create({ windowId, url, active: true });
+    for (let i = 0; i < 30; i++) {
+      await sleep(1000);
+      const t = await chrome.tabs.get(tab.id);
+      if (t.status === 'complete' && /^https?:/.test(t.url || '')) break;
+    }
+    let page = await run(tab.id, readJobPage);
     let text = `${page.title}. ${page.text}`;
     if (CAPTCHA_PAGE.test(text.slice(0, 600))) {
-      const solved = await waitForUser(jobTab, async () => {
-        page = await run(jobTab, readJobPage);
+      const solved = await waitForUser(tab.id, async () => {
+        page = await run(tab.id, readJobPage);
         text = `${page.title}. ${page.text}`;
         return !CAPTCHA_PAGE.test(text.slice(0, 600));
       }, `${hostOf(url)} is asking for a check (captcha).`, 15 * 60 * 1000);
@@ -59,6 +65,8 @@ async function readJobText(jobTab, url) {
     return text;
   } catch {
     return '';
+  } finally {
+    if (tab) chrome.tabs.remove(tab.id).catch(() => {});
   }
 }
 
@@ -86,10 +94,11 @@ async function judgeJob(item, country, text, pick) {
   return open && fit ? { strict: false, job: { ...job, remoteScope: 'unknown (not stated)' } } : null;
 }
 
-// A long job list: open every job one by one (in a second tab, so the list keeps what it has loaded),
-// and when every job on screen is done, press "Show more jobs" and carry on with the new ones.
-async function walkList(listTab, jobTab, page, item, country) {
+// A long job list: open every job one by one, each in its own tab that is closed afterwards (the list tab keeps
+// what it has loaded), and when every job on screen is done, press "Show more jobs" and carry on with the new ones.
+async function walkList(listTab, page, item, country) {
   const host = hostOf(item.url);
+  const { windowId } = await chrome.tabs.get(listTab);
   const strict = [];
   const unstated = [];
   const seen = new Set();
@@ -104,8 +113,8 @@ async function walkList(listTab, jobTab, page, item, country) {
       if (opened >= MAX_JOBS_PER_LINK || !(await getChecker()).running) return { strict, unstated, opened };
       seen.add(keyOf(card));
       opened++;
-      await setChecker({ message: `${host}: reading job ${opened} (${known.size} found so far)…` });
-      const text = await readJobText(jobTab, card.url);
+      await setChecker({ message: `${host}: reading job ${opened} of ${known.size}: ${String(card.title).slice(0, 60)}` });
+      const text = await readJobText(windowId, card.url);
       if (text) {
         const j = await judgeJob(item, country, text, card);
         if (j) (j.strict ? strict : unstated).push(j.job);
@@ -187,14 +196,9 @@ async function checkUrl(tabId, item) {
   let unstated = [];
 
   if (isList) {
-    const { windowId } = await chrome.tabs.get(tabId);
-    const jobTab = (await chrome.tabs.create({ windowId, url: 'about:blank', active: false })).id;
-    try {
-      ({ strict, unstated } = await walkList(tabId, jobTab, page, item, country));
-    } finally {
-      chrome.tabs.remove(jobTab).catch(() => {});
-    }
+    ({ strict, unstated } = await walkList(tabId, page, item, country));
   } else {
+    const { windowId } = await chrome.tabs.get(tabId);
     // A short page: have DeepSeek shortlist titles, then read each job and judge it.
     const short = await deepseekJson(
       `You match job openings to a candidate. Candidate: ${await getProfile()} From the numbered job titles choose up to ${MAX_READ} that best fit, best first. ` +
@@ -205,7 +209,8 @@ async function checkUrl(tabId, item) {
       ? short.indexes.filter((i) => Number.isInteger(i) && page.titles[i]).slice(0, MAX_READ).map((i) => page.titles[i])
       : page.backend.slice(0, MAX_READ);
     for (const pick of picks) {
-      const text = await readJobText(tabId, pick.url);
+      await setChecker({ message: `${hostOf(item.url)}: reading ${String(pick.title).slice(0, 60)}` });
+      const text = await readJobText(windowId, pick.url);
       if (!text) continue;
       const j = await judgeJob(item, country, text, pick);
       if (j) (j.strict ? strict : unstated).push(j.job);
