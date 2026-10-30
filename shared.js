@@ -226,9 +226,15 @@ async function findCareerLinks() {
 }
 
 // Injected into a careers page: are there openings, and are any of them backend roles?
-async function analyzeJobsPage() {
+async function analyzeJobsPage(patientMs = 3000) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(3000); // let single-page-app job lists render
+  // A page that builds its list late (a single-page app) gets more time, until something job-like shows up.
+  const started = Date.now();
+  const looksLoaded = () => [...document.querySelectorAll('a[href]')].some(
+    (a) => /\/(jobs?|job-listing|viewjob|rc\/clk|remote-jobs|positions?|openings?|postings?|roles?)([/?]|$)/i.test(a.href) && (a.innerText || '').trim().length >= 5
+  );
+  while (patientMs > 3000 && !looksLoaded() && Date.now() - started < patientMs - 3000) await sleep(500);
   const text = document.body?.innerText || '';
   const noJobs = /(no|don.t have any|do not have any|aren.t any|there are no|currently no)( (current|open|available))? (job )?(openings|positions|vacancies|jobs|roles)|no jobs (available|found)|not (currently )?hiring|check back (soon|later)|0 (open )?(jobs|positions|roles)/i.test(text);
   // Roles to match, tuned to a ~3-year full-stack profile: Laravel/PHP, Node/Nest/Express, React/Next, TypeScript.
@@ -300,7 +306,7 @@ async function analyzeJobsPage() {
     .sort((x, y) => rank(y.title) - rank(x.title))
     .slice(0, 3);
   const textBackend = BACKEND_TITLE.test(text) ? (text.match(BACKEND_TITLE) || [''])[0] : '';
-  return { notFound: /\b(404|page not found|not found|doesn.t exist)\b/i.test(text.slice(0, 400)), noJobs, jobCount: all.length, listLinks: listLinks.slice(0, 2), backend, titles: all.slice(0, 200), text: text.replace(/\s+/g, ' ').trim().slice(0, 6000), textBackend, pageUrl: location.href.split('#')[0] };
+  return { linkCount: document.querySelectorAll('a[href]').length, textLength: text.length, notFound: /\b(404|page not found|not found|doesn.t exist)\b/i.test(text.slice(0, 400)), noJobs, jobCount: all.length, listLinks: listLinks.slice(0, 2), backend, titles: all.slice(0, 200), text: text.replace(/\s+/g, ' ').trim().slice(0, 6000), textBackend, pageUrl: location.href.split('#')[0] };
 }
 
 // Injected into a single job posting: its visible text, trimmed for the model.

@@ -70,6 +70,7 @@ const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); 
 // Returns the job's text, or '' when it cannot be read. Waits for the user on a captcha.
 async function readJobText(windowId, url) {
   let tab;
+  if (!(await holdIfPaused())) return '';
   if (!(await restIfNeeded(hostOf(url)))) return '';
   try {
     tab = await chrome.tabs.create({ windowId, url, active: false }); // never activate a tab: that can raise the window
@@ -182,7 +183,7 @@ async function walkList(listTab, page, item, country) {
       try { await openPage(listTab, more.next); } catch { break; }
     } else if (!more.clicked) break;
     let again;
-    try { again = await run(listTab, analyzeJobsPage); } catch { break; }
+    try { again = await run(listTab, analyzeJobsPage, [8000]); } catch { break; }
     cards = again.titles.filter((t) => !seen.has(keyOf(t)));
     again.titles.forEach((t) => known.add(keyOf(t)));
     if (!cards.length) break;
@@ -191,13 +192,24 @@ async function walkList(listTab, page, item, country) {
 }
 
 // Opens one saved link and returns what to store: {status, kind, results}.
+// A plain sentence for what a check found, for the status bar and the "Task complete" notification.
+function describeOutcome(out, found) {
+  if (out.status === 'unreachable') return 'could not read the page (blocked, empty or not found)';
+  if (found) return `${found} matching ${found === 1 ? 'job' : 'jobs'} found`;
+  const first = (out.results || [])[0] || {};
+  if (first.openings === 'yes') return 'jobs were found but none fit';
+  return `no job links found on the page (${first.seenNote || 'nothing seen'})`;
+}
+
+// Returns null when the run was stopped on the way, so nothing is recorded for the link.
 async function checkUrl(tabId, item) {
   const unreachable = { status: 'unreachable', kind: 'unknown' };
+  if (!(await holdIfPaused())) return null;
   let landed;
   let r;
   try {
     landed = await openPage(tabId, item.url);
-    r = await run(tabId, analyzeJobsPage);
+    r = await run(tabId, analyzeJobsPage, [12000]);
   } catch {
     return unreachable;
   }
@@ -212,6 +224,7 @@ async function checkUrl(tabId, item) {
   }
   if (r.notFound || r.text.length < 80 || PAGE_BLOCKED.test(r.text.slice(0, 600))) return unreachable;
 
+  if (!(await holdIfPaused())) return null;
   // One DeepSeek call: what kind of page is this, and which links lead to the job list if it is not one itself.
   let links = [];
   try { links = (await run(tabId, findCareerLinks)).all; } catch { /* no links */ }
@@ -229,7 +242,7 @@ async function checkUrl(tabId, item) {
     for (const i of cls.follow.filter((n) => Number.isInteger(n) && links[n]).slice(0, 2)) {
       try {
         const u = await openPage(tabId, links[i].url);
-        const deeper = await run(tabId, analyzeJobsPage);
+        const deeper = await run(tabId, analyzeJobsPage, [8000]);
         if (!deeper.notFound && deeper.titles.length) { page = deeper; listUrl = u.split('#')[0]; break; }
       } catch { /* try the next one */ }
     }
@@ -238,7 +251,12 @@ async function checkUrl(tabId, item) {
   if (SINGLE_JOB_URL.test(landed)) page = { ...page, titles: [] };
   if ((kind === 'posting' || SINGLE_JOB_URL.test(landed)) && !page.titles.length) page = { ...page, titles: [{ title: (await run(tabId, readJobPage)).title, url: landed }] };
 
-  const base = { careersUrl: listUrl, openings: page.titles.length ? 'yes' : 'no', checkedBy: 'DeepSeek' };
+  // Keep what was seen, so a link that gave no jobs can be understood afterwards.
+  const seenNote = `${r.linkCount ?? '?'} links, ${r.textLength ?? '?'} characters`;
+  const { checkerDebug: dbg = [] } = await chrome.storage.local.get('checkerDebug');
+  dbg.push({ url: item.url, page: landed, titles: page.titles.length, seen: seenNote, kind });
+  await chrome.storage.local.set({ checkerDebug: dbg.slice(-20) });
+  const base = { careersUrl: listUrl, openings: page.titles.length ? 'yes' : 'no', checkedBy: 'DeepSeek', seenNote };
   if (!page.titles.length) return { status: 'checked', kind, results: [base] };
 
   const country = item.countries[0] || '';
@@ -292,6 +310,7 @@ async function checkLoop(onlyId = null) {
     const tabId = win.tabs[0].id;
     let matches = 0;
     let done = 0;
+    let lastNote = ''; // what the last link gave, shown in the final message
     siteVisits.clear();
     siteRested.clear();
     for (;;) {
@@ -307,7 +326,7 @@ async function checkLoop(onlyId = null) {
         return finishChecker(
           done === 0
             ? 'Done: nothing to check. Every saved link was already checked. Add a link, or press "Check everything again" in the workspace.'
-            : `Done: every saved link is checked. ${matches} matching jobs found.`,
+            : `Done: every saved link is checked. ${matches} matching jobs found.${matches === 0 && lastNote ? ` Last link, ${lastNote}.` : ''}`,
           winId
         );
       }
@@ -317,13 +336,21 @@ async function checkLoop(onlyId = null) {
       // Tell the server this link is still being worked on, so another browser does not take it.
       const beat = setInterval(() => serverFetch('/checker/heartbeat', { id: next.id }).catch(() => {}), 60000);
       try { out = await checkUrl(tabId, next); } catch { out = { status: 'unreachable', kind: 'unknown' }; } finally { clearInterval(beat); }
+      if (!out) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
+      // Hold here too: a paused run must not record a result or close its window until it is resumed.
+      if (!(await holdIfPaused())) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
       await serverFetch('/checker/result', { id: next.id, url: next.url, ...out }); // url lets the server drop a result for a link edited meanwhile
       await chrome.storage.local.set({ checkerDaily: { date: today(), count: used + 1 } });
       const found = (out.results || []).filter((r) => r.jobUrl).length;
       matches += found;
       done++;
-      await setChecker({ message: `${new URL(next.url).hostname}: ${out.status === 'unreachable' ? 'could not read the page' : found ? `${found} matching ${found === 1 ? 'job' : 'jobs'} found` : 'no matching job'}. ${done} checked, ${matches} matches.`, currentId: null });
-      if (onlyId) return finishChecker(`Done: ${hostOf(next.url)} checked. ${matches} matching ${matches === 1 ? 'job' : 'jobs'} found.`, winId);
+      const outcome = describeOutcome(out, found);
+      lastNote = `${hostOf(next.url)}: ${outcome}`;
+      await setChecker({ message: `${new URL(next.url).hostname}: ${outcome}. ${done} checked, ${matches} matches.`, currentId: null });
+      if (onlyId) {
+        if (!(await holdIfPaused())) return finishChecker('Stopped by you.', winId);
+        return finishChecker(`Done: ${hostOf(next.url)}: ${outcome}.`, winId);
+      }
       if (!(await checkerPause(Math.round(rnd(5, 12))))) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
     }
   } catch (e) {
