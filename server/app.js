@@ -1,6 +1,7 @@
 import express from 'express';
 import { collectorRoutes } from './routes/collector.js';
 import { checkerRoutes } from './routes/checker.js';
+import { exportRoutes } from './routes/export.js';
 
 // pool is a mysql2/promise pool. Every route except /health needs the x-lead-key header.
 export function createApp(pool, { key } = {}) {
@@ -11,6 +12,7 @@ export function createApp(pool, { key } = {}) {
   app.use((req, res, next) => (req.get('x-lead-key') === key ? next() : res.status(401).json({ error: 'bad key' })));
   app.use(collectorRoutes(pool));
   app.use(checkerRoutes(pool));
+  app.use(exportRoutes(pool));
   app.get('/stats', async (req, res, next) => {
     try {
       const [[c]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='done') AS done FROM countries");

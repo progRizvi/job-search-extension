@@ -51,3 +51,18 @@ test('checker returns the oldest new url with its countries, and a result marks 
   const [[row]] = await pool.query('SELECT job_title, remote_scope FROM job_results WHERE url_id = ?', [next.id]);
   assert.deepEqual([row.job_title, row.remote_scope], ['Node Developer', 'worldwide']);
 });
+
+test('export returns one row per url and country with the job fields filled', async () => {
+  const a = await call('/collector/next');
+  await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://a.com/jobs'] });
+  await pool.query("UPDATE countries SET status='done' WHERE code=?", [a.country.code]);
+  const b = await call('/collector/next');
+  await call('/collector/results', { countryCode: b.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://a.com/jobs'] });
+  const next = await call('/checker/next');
+  await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', result: { careersUrl: 'https://a.com/jobs', openings: 'yes', jobTitle: 'Node Dev', jobUrl: 'https://a.com/jobs/1', workType: 'remote', remoteScope: 'worldwide', fit: 'good', stack: 'node', checkedBy: 'DeepSeek' } });
+  const { rows } = await call('/export');
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.jobTitle), ['Node Dev', 'Node Dev']);
+  assert.deepEqual(rows.map((r) => r.country).sort(), [a.country.name, b.country.name].sort());
+  assert.equal(rows[0].url, 'https://a.com/jobs');
+});

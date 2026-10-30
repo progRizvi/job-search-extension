@@ -472,6 +472,24 @@ $('geoMain').addEventListener('click', async () => {
   if (res && !res.ok) { $('geoNote').textContent = `Could not start: ${res.error}`; $('geoNote').className = 'hint err'; }
   renderGeo();
 });
+$('geoExport').addEventListener('click', async () => {
+  try {
+    const { rows } = await serverFetch('/export');
+    if (!rows.length) { $('chkNote').textContent = 'Nothing to export yet. Run the country search first.'; return; }
+    const header = ['Country', 'URL', 'Kind', 'Status', 'Careers/List Page', 'Openings', 'Job Title', 'Job URL', 'Work Type', 'Remote Scope', 'Fit', 'Stack'];
+    const data = [header, ...rows.map((r) => [r.country, r.url, r.kind, r.status, r.careersUrl, r.openings, r.jobTitle, r.jobUrl, r.workType, r.remoteScope, r.fit, r.stack])];
+    const blob = new Blob([buildXlsx(data)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `country-job-leads-${today()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    $('chkNote').textContent = `Saved ${rows.length} rows to your Downloads folder.`;
+  } catch (e) {
+    $('chkNote').textContent = e.message;
+    $('chkNote').className = 'hint err';
+  }
+});
 $('chkMain').addEventListener('click', async () => {
   const { checker = {} } = await chrome.storage.local.get('checker');
   if (checker.running) {
