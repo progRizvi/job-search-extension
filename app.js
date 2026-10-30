@@ -353,6 +353,7 @@ function renderCountry() {
   $('chkStart').textContent = checker.running ? 'Stop checking' : 'Check saved links';
   $('chkStart').disabled = !leadKey || !server.ok || (!checker.running && (busy || !S.deepseekKey));
   $('geoExport').disabled = !server.ok;
+  $('chkRetry').disabled = $('chkAgain').disabled = !server.ok || !!checker.running;
   $('geoNote').textContent = !leadKey ? 'Save the server key in Settings.' : !S.deepseekKey ? 'Checking links needs a DeepSeek key.' : '';
   const day = (d) => (d && d.date === today() ? d.count : 0);
   $('limits').textContent = `Today: ${day(S.collectorDaily)} of 150 searches, ${day(S.checkerDaily)} of 300 link checks. Bangladesh, India, Pakistan and Afghanistan are skipped.`;
@@ -385,6 +386,16 @@ async function exportLeads() {
   } catch (e) { toast(e.message); }
 }
 $('geoExport').addEventListener('click', exportLeads);
+
+async function requeue(which) {
+  try {
+    const r = await serverFetch('/checker/requeue', { which });
+    toast(r.requeued ? `${r.requeued} links will be checked again. Press Check saved links.` : 'Nothing to re-check.');
+    refreshServer();
+  } catch (e) { toast(e.message); }
+}
+$('chkRetry').addEventListener('click', () => requeue('unreachable'));
+armed($('chkAgain'), 'Click again to re-check every link', () => requeue('all'));
 
 async function loadCountries() {
   try {

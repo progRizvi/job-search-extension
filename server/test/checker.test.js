@@ -102,3 +102,15 @@ test('a list page can save several matching jobs, and a re-check replaces them',
   await call('/checker/result', { id: next.id, status: 'checked', kind: 'board', results: [job(9)] });
   assert.deepEqual((await call('/export')).rows.map((r) => r.jobTitle), ['Node Dev 9']);
 });
+
+test('requeue puts checked links back in the queue', async () => {
+  const a = await call('/collector/next');
+  await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://x.com/1', 'https://x.com/2', 'https://x.com/3'] });
+  const one = await call('/checker/next');
+  await call('/checker/result', { id: one.id, status: 'checked', kind: 'board' });
+  const two = await call('/checker/next');
+  await call('/checker/result', { id: two.id, status: 'unreachable', kind: 'unknown' });
+  assert.deepEqual(await call('/checker/requeue', { which: 'unreachable' }), { requeued: 1 });
+  assert.deepEqual(await call('/checker/requeue', { which: 'all' }), { requeued: 1 }); // the one still checked
+  assert.equal((await call('/stats')).checked, 0);
+});

@@ -42,5 +42,16 @@ export function checkerRoutes(pool) {
     } catch (e) { next(e); }
   });
 
+  // Puts links back in the queue: only the ones that could not be read, or every checked link.
+  r.post('/checker/requeue', async (req, res, next) => {
+    try {
+      const which = (req.body || {}).which;
+      const [out] = await pool.query(
+        which === 'unreachable' ? "UPDATE urls SET status = 'new' WHERE status = 'unreachable'" : "UPDATE urls SET status = 'new' WHERE status <> 'new'"
+      );
+      res.json({ requeued: out.affectedRows });
+    } catch (e) { next(e); }
+  });
+
   return r;
 }

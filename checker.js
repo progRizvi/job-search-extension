@@ -220,7 +220,14 @@ async function checkLoop() {
       if (used >= CHECK_DAILY_LIMIT) return finishChecker(`Done for today: ${CHECK_DAILY_LIMIT} links checked. ${matches} matching jobs found.`, winId);
 
       const next = await serverFetch('/checker/next');
-      if (next.done) return finishChecker(`Done: every saved link is checked. ${matches} matching jobs found.`, winId);
+      if (next.done) {
+        return finishChecker(
+          done === 0
+            ? 'Done: nothing to check. Every saved link was already checked. Add a link, or press "Check everything again" in the workspace.'
+            : `Done: every saved link is checked. ${matches} matching jobs found.`,
+          winId
+        );
+      }
 
       await setChecker({ message: `Checking ${new URL(next.url).hostname}…` });
       let out;
