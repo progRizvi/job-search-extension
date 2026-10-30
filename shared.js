@@ -423,3 +423,17 @@ function readLinkedInWebsite() {
   const url = a && external(a);
   return { website: url || '' };
 }
+
+// Does a job qualify for someone living in countryName? Only remote jobs count, and only when the scope
+// is worldwide, a region (assumed to include the country), or a country list that names it.
+// remoteScope looks like "worldwide", "region: Europe", "country-only: France, Spain", "excluded" or "unknown".
+function remoteMatches(remoteScope, workType, countryName, countries = []) {
+  if (String(workType || '').toLowerCase() !== 'remote') return false;
+  const s = String(remoteScope || '').toLowerCase().trim();
+  if (/^(worldwide|anywhere|global)\b/.test(s)) return true;
+  if (/^region\b/.test(s)) return true;
+  if (/^country-only\b/.test(s)) {
+    return [countryName, ...countries].map((x) => String(x || '').toLowerCase()).filter(Boolean).some((n) => s.includes(n));
+  }
+  return false;
+}

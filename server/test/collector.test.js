@@ -54,5 +54,13 @@ test('next resumes at the saved template, then moves to the next country after t
   assert.equal(b.templateIndex, 0);
   const stats = await call('/stats');
   assert.equal(stats.countriesDone, 1);
-  assert.equal(stats.countriesTotal, 202);
+  assert.equal(stats.countriesTotal, 198); // Bangladesh, India, Pakistan and Afghanistan are skipped
+});
+
+test('skipped countries are never handed out, even if already stored', async () => {
+  await pool.query("INSERT IGNORE INTO countries (code, name) VALUES ('AF', 'Afghanistan'), ('IN', 'India')");
+  await seedCountries(pool);
+  const [rows] = await pool.query("SELECT code FROM countries WHERE code IN ('BD','IN','PK','AF')");
+  assert.equal(rows.length, 0);
+  assert.notEqual((await call('/collector/next')).country.name, 'Afghanistan');
 });

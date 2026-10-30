@@ -21,8 +21,8 @@ async function render() {
   const sitesRunning = !!sites.running;
   const { jobs = {} } = await chrome.storage.local.get('jobs');
   const jobsRunning = !!jobs.running;
-  const { collector: coll = {} } = await chrome.storage.local.get('collector');
-  const collRunning = !!coll.running;
+  const { collector: coll = {}, checker: chk0 = {} } = await chrome.storage.local.get(['collector', 'checker']);
+  const collRunning = !!(coll.running || chk0.running);
   const limitHit = count >= DAILY_LIMIT;
 
   $('count').textContent = count;
@@ -422,12 +422,20 @@ $('researchSel').addEventListener('click', async () => {
 
 // ---- Country job search (local server) ----
 async function renderGeo() {
-  const st = await chrome.storage.local.get(['collector', 'leadKey', 'auto', 'sites', 'jobs']);
+  const st = await chrome.storage.local.get(['collector', 'checker', 'leadKey', 'auto', 'sites', 'jobs']);
   const coll = st.collector || {};
+  const chk = st.checker || {};
   const otherBusy = !!(st.auto?.running || st.sites?.running || st.jobs?.running);
   const btn = $('geoMain');
   btn.textContent = coll.running ? 'Stop country search' : 'Start country search';
-  btn.disabled = !st.leadKey || (!coll.running && otherBusy);
+  btn.disabled = !st.leadKey || chk.running || (!coll.running && otherBusy);
+  const cb = $('chkMain');
+  cb.textContent = chk.running ? 'Stop checking links' : 'Check saved links for jobs';
+  cb.disabled = !st.leadKey || coll.running || (!chk.running && otherBusy);
+  let cnote = chk.message || '';
+  if (chk.running && chk.nextAt) cnote += ` Next link in ${Math.max(0, Math.round((chk.nextAt - Date.now()) / 1000))}s.`;
+  $('chkNote').textContent = cnote;
+  $('chkNote').className = !chk.running && /^Stopped/.test(chk.message || '') ? 'hint err' : 'hint';
   let note = coll.message || '';
   if (coll.running && coll.nextAt) note += ` Next search in ${Math.max(0, Math.round((coll.nextAt - Date.now()) / 1000))}s.`;
   $('geoNote').textContent = coll.running && coll.country ? `${coll.country}: ${note}` : note;
@@ -462,6 +470,17 @@ $('geoMain').addEventListener('click', async () => {
   $('geoNote').textContent = 'Starting… a separate window will open.';
   const res = await chrome.runtime.sendMessage({ type: 'startCollector' });
   if (res && !res.ok) { $('geoNote').textContent = `Could not start: ${res.error}`; $('geoNote').className = 'hint err'; }
+  renderGeo();
+});
+$('chkMain').addEventListener('click', async () => {
+  const { checker = {} } = await chrome.storage.local.get('checker');
+  if (checker.running) {
+    await chrome.runtime.sendMessage({ type: 'stopChecker' });
+    return renderGeo();
+  }
+  $('chkNote').textContent = 'Starting… a separate window will open.';
+  const res = await chrome.runtime.sendMessage({ type: 'startChecker' });
+  if (res && !res.ok) { $('chkNote').textContent = `Could not start: ${res.error}`; $('chkNote').className = 'hint err'; }
   renderGeo();
 });
 setInterval(renderGeo, 3000);

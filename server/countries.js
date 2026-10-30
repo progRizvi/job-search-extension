@@ -212,3 +212,7 @@ export const QUERY_TEMPLATES = [
 ];
 
 export const buildQuery = (templateIndex, countryName) => QUERY_TEMPLATES[templateIndex].replace('{country}', countryName);
+
+// Countries the user chose not to search. They stay in COUNTRIES but are never handed out.
+export const SKIPPED_COUNTRY_CODES = ['BD', 'IN', 'PK', 'AF'];
+export const SEARCHED_COUNTRIES = COUNTRIES.filter((c) => !SKIPPED_COUNTRY_CODES.includes(c.code));

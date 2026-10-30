@@ -14,6 +14,7 @@ async function deepseekJson(system, user) {
     const res = await fetch(DEEPSEEK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deepseekKey}` },
+      signal: AbortSignal.timeout(60000), // a stalled connection must not freeze a whole run
       body: JSON.stringify({
         model: 'deepseek-chat',
         temperature: 0,
