@@ -511,8 +511,8 @@ function renderLinks() {
       linkCell,
       el('td', { title: l.countries }, l.countries.length > 48 ? `${l.countries.slice(0, 46)}…` : l.countries || '–'),
       el('td', {}, l.source === 'manual' ? 'Added by me' : l.source.replace(/^remote /, '') || '–'),
-      el('td', { class: 'status', 'data-s': isActive ? 'active' : l.status }, isActive ? 'Checking now' : STATUS_LABEL[l.status] || l.status),
-      el('td', {}, l.jobs ? String(l.jobs) : '–'),
+      el('td', { class: 'status', 'data-s': isActive ? 'active' : l.status }, isActive ? 'Checking now' : l.status === 'new' && l.jobs ? 'Waiting to re-check' : STATUS_LABEL[l.status] || l.status),
+      el('td', { title: l.status === 'new' && l.jobs ? 'From the last check. They are replaced when the re-check finishes.' : '' }, l.jobs ? String(l.jobs) : '–'),
       el('td', { class: 'acts' },
         el('button', { class: 'btn quiet mini', type: 'button', onclick: () => { links.editing = l.id; renderLinks(); } }, 'Edit'),
         l.status !== 'new' && !isActive
