@@ -103,7 +103,7 @@ function renderNow() {
   const now = $('now');
   const stop = $('nowStop');
   const pauseBtn = $('nowPause');
-  pauseBtn.hidden = !run;
+  pauseBtn.hidden = !run && !S.paused;
   pauseBtn.textContent = S.paused ? 'Resume' : 'Pause';
   pauseBtn.onclick = () => chrome.storage.local.set({ paused: !S.paused });
   if (S.paused && run && !S.waiting) {
@@ -131,6 +131,7 @@ function renderNow() {
     return;
   }
   stop.hidden = true;
+  if (S.paused) chrome.storage.local.remove('paused'); // nothing is running, so there is nothing to resume
   const last = [S.auto, S.collector, S.checker].map((r) => r && r.message).filter(Boolean).pop() || '';
   now.dataset.s = /^Stopped:/.test(last) ? 'error' : 'idle';
   const waiting = server.stats ? server.stats.waiting : 0;
@@ -170,7 +171,7 @@ function renderOverview() {
       action: auto.running
         ? { label: 'Stop', run: () => send('stop') }
         : lastUrl
-          ? { label: 'Resume last page', run: () => send('start', { url: lastUrl }), disabled: anyRun || S.count >= DAILY_LIMIT }
+          ? { label: 'Continue from last page', run: () => send('start', { url: lastUrl }), disabled: anyRun || S.count >= DAILY_LIMIT }
           : { label: 'Open LinkedIn search', run: () => chrome.tabs.create({ url: 'https://www.linkedin.com/search/results/companies/' }) },
     }),
     stop({

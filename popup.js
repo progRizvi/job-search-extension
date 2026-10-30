@@ -36,7 +36,7 @@ async function render() {
   if (st.paused && active && !st.waiting) {
     now.dataset.s = 'waiting';
     $('nowTitle').textContent = 'Paused';
-    $('nowMsg').textContent = 'Resume it from the workspace.';
+    $('nowMsg').textContent = 'Press Resume to continue.';
   } else if (st.waiting) {
     now.dataset.s = 'waiting';
     $('nowTitle').textContent = 'Waiting for you';
@@ -53,6 +53,13 @@ async function render() {
     $('nowTitle').textContent = limitHit ? 'Done for today' : 'Ready';
     $('nowMsg').textContent = last;
   }
+
+  // A pause flag with nothing running would only get in the way of the next run: clear it.
+  if (st.paused && !active) chrome.storage.local.remove('paused');
+  const pauseBtn = $('pause');
+  pauseBtn.hidden = !active;
+  pauseBtn.textContent = st.paused ? 'Resume' : 'Pause';
+  pauseBtn.dataset.paused = st.paused ? '1' : '';
 
   const main = $('main');
   main.dataset.mode = auto.running ? 'stop' : 'start';
@@ -110,6 +117,8 @@ $('scrape').addEventListener('click', async () => {
   }
   render();
 });
+
+$('pause').addEventListener('click', () => chrome.storage.local.set({ paused: !$('pause').dataset.paused }));
 
 $('open').addEventListener('click', async () => {
   const url = chrome.runtime.getURL('app.html');
