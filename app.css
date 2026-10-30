@@ -165,3 +165,9 @@ th:last-child, td:last-child { white-space: nowrap; }
   .stop:last-child::before { display: none; }
   .meters { grid-template-columns: 1fr; }
 }
+
+textarea, select {
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit;
+}
+textarea { width: 100%; max-width: 640px; display: block; margin-bottom: 10px; resize: vertical; font-size: 13px; }
+select { min-width: 200px; }

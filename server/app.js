@@ -2,6 +2,7 @@ import express from 'express';
 import { collectorRoutes } from './routes/collector.js';
 import { checkerRoutes } from './routes/checker.js';
 import { exportRoutes } from './routes/export.js';
+import { linksRoutes } from './routes/links.js';
 
 // pool is a mysql2/promise pool. Every route except /health needs the x-lead-key header.
 export function createApp(pool, { key } = {}) {
@@ -13,9 +14,10 @@ export function createApp(pool, { key } = {}) {
   app.use(collectorRoutes(pool));
   app.use(checkerRoutes(pool));
   app.use(exportRoutes(pool));
+  app.use(linksRoutes(pool));
   app.get('/stats', async (req, res, next) => {
     try {
-      const [[c]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='done') AS done FROM countries");
+      const [[c]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='done') AS done FROM countries WHERE code <> 'ZZ'");
       const [[u]] = await pool.query("SELECT COUNT(*) AS n, SUM(status='checked') AS checked FROM urls");
       const [[m]] = await pool.query('SELECT COUNT(*) AS n FROM job_results WHERE job_url IS NOT NULL');
       res.json({ countriesTotal: Number(c?.n || 0), countriesDone: Number(c?.done || 0), urls: Number(u?.n || 0), checked: Number(u?.checked || 0), matches: Number(m?.n || 0) });

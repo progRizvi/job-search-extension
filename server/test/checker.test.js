@@ -66,3 +66,27 @@ test('export returns one row per url and country with the job fields filled', as
   assert.deepEqual(rows.map((r) => r.country).sort(), [a.country.name, b.country.name].sort());
   assert.equal(rows[0].url, 'https://a.com/jobs');
 });
+
+test('manual links: added with a country, re-queued when already checked, and checked before searched links', async () => {
+  const a = await call('/collector/next');
+  await call('/collector/results', { countryCode: a.country.code, templateIndex: 0, engine: 'Bing', urls: ['https://searched.com/jobs'] });
+  const r = await call('/links', { countryCode: a.country.code, urls: ['https://www.ycombinator.com/jobs/role/software-engineer?utm_x=1', 'not a url', 'https://www.indeed.com/q-node-jobs.html'] });
+  assert.deepEqual([r.added, r.requeued, r.invalid], [2, 0, 1]);
+  assert.equal((await call('/checker/next')).url, 'https://www.ycombinator.com/jobs/role/software-engineer'); // manual first
+  const first = await call('/checker/next');
+  await call('/checker/result', { id: first.id, status: 'checked', kind: 'board' });
+  const again = await call('/links', { countryCode: a.country.code, urls: ['https://www.ycombinator.com/jobs/role/software-engineer'] });
+  assert.deepEqual([again.added, again.requeued], [0, 1]); // an already-checked link is queued for another check
+  assert.equal((await call('/checker/next')).url, 'https://www.ycombinator.com/jobs/role/software-engineer');
+});
+
+test('Anywhere is offered for manual links but is not counted as a country', async () => {
+  const list = await call('/countries');
+  assert.equal(list.countries[0].name, 'Anywhere');
+  assert.equal(list.countries.length, 199);
+  const stats = await call('/stats');
+  assert.equal(stats.countriesTotal, 198);
+  const r = await call('/links', { urls: ['https://remoteok.com/remote-node-jobs'] }); // no country means Anywhere
+  assert.equal(r.added, 1);
+  assert.deepEqual((await call('/checker/next')).countries, ['Anywhere']);
+});

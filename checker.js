@@ -102,10 +102,10 @@ async function checkUrl(tabId, item) {
       text = (await run(tabId, readJobPage)).text;
     } catch { continue; }
     const ai = await deepseekJson(
-      `You judge one job for a candidate. Candidate: ${await getProfile()} The candidate lives in ${country} and wants a remote job. ` +
+      `You judge one job for a candidate. Candidate: ${await getProfile()} ${country === 'Anywhere' ? 'The candidate can work from any country' : `The candidate lives in ${country}`} and wants a remote job. ` +
         'Answer as {"fit": "good" | "maybe" | "poor", "workType": "remote" | "hybrid" | "onsite" | "unknown", ' +
         '"remoteScope": "worldwide" | "region: <name>" | "country-only: <countries>" | "excluded" | "unknown" ' +
-        `(who may apply: use "region: <name>" only when that region includes ${country}; use "excluded" when people in ${country} cannot apply, ` +
+        `(who may apply: use "region: <name>" only when that region includes ${country === 'Anywhere' ? 'the candidate' : country}; use "excluded" when ${country === 'Anywhere' ? 'the candidate' : `people in ${country}`} cannot apply, ` +
         'for example a region or country list that does not include it; use "country-only" for named countries that include it), ' +
         '"experience": "years or unknown", "stack": "main technologies, max 8, comma separated"}.',
       text

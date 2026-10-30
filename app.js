@@ -333,6 +333,7 @@ async function refreshServer() {
     server = { ok: false, error: e instanceof ServerDown ? e.message : e.message, stats: null, matches: [] };
   }
   routeSig = '';
+  loadCountries();
   renderCountry();
   renderOverview();
 }
@@ -384,6 +385,35 @@ async function exportLeads() {
   } catch (e) { toast(e.message); }
 }
 $('geoExport').addEventListener('click', exportLeads);
+
+async function loadCountries() {
+  try {
+    const { countries } = await serverFetch('/countries');
+    const sel = $('manualCountry');
+    if (sel.options.length === countries.length) return;
+    sel.textContent = '';
+    countries.forEach((c) => sel.append(el('option', { value: c.code }, c.name)));
+  } catch { /* the server is off; the list fills in when it is back */ }
+}
+
+$('manualAdd').addEventListener('click', async () => {
+  const urls = $('manualUrls').value.split(/\s+/).map((u) => u.trim()).filter(Boolean);
+  const note = $('manualNote');
+  note.className = 'note';
+  if (!urls.length) { note.textContent = 'Paste at least one link.'; return; }
+  try {
+    const r = await serverFetch('/links', { countryCode: $('manualCountry').value, urls });
+    const parts = [`${r.added} added`];
+    if (r.requeued) parts.push(`${r.requeued} will be checked again`);
+    if (r.invalid) parts.push(`${r.invalid} skipped (not a web link)`);
+    note.textContent = `${parts.join(', ')}.`;
+    $('manualUrls').value = '';
+    refreshServer();
+  } catch (e) {
+    note.className = 'note err';
+    note.textContent = e instanceof ServerDown ? `${e.message} Start server/start.bat.` : e.message;
+  }
+});
 
 // ---------- settings ----------
 let dsNotice = '';

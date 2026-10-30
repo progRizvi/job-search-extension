@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { SEARCHED_COUNTRIES, SKIPPED_COUNTRY_CODES, QUERY_TEMPLATES, buildQuery } from '../countries.js';
 import { normalizeUrl, urlHash } from '../normalize.js';
+import { ensureAnywhere } from './links.js';
 
 export async function seedCountries(pool) {
+  await ensureAnywhere(pool);
   // Skipped countries are removed even if an earlier run already stored them.
   await pool.query('DELETE FROM countries WHERE code IN (?)', [SKIPPED_COUNTRY_CODES]);
-  const [[{ n }]] = await pool.query('SELECT COUNT(*) AS n FROM countries');
+  const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM countries WHERE code <> 'ZZ'");
   if (n > 0) return;
   await pool.query('INSERT INTO countries (code, name) VALUES ?', [SEARCHED_COUNTRIES.map((c) => [c.code, c.name])]);
 }

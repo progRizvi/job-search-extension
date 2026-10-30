@@ -9,7 +9,7 @@ export function checkerRoutes(pool) {
   // The oldest url that has not been checked, with the countries whose searches found it.
   r.get('/checker/next', async (req, res, next) => {
     try {
-      const [rows] = await pool.query("SELECT id, url FROM urls WHERE status = 'new' ORDER BY id LIMIT 1");
+      const [rows] = await pool.query("SELECT id, url FROM urls WHERE status = 'new' ORDER BY (first_query = 'manual') DESC, id LIMIT 1");
       if (!rows.length) return res.json({ done: true });
       const [cs] = await pool.query(
         'SELECT DISTINCT c.name FROM url_countries uc JOIN countries c ON c.code = uc.country_code WHERE uc.url_id = ? ORDER BY c.name',

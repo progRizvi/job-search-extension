@@ -83,6 +83,15 @@
           <span id="geoNote" class="note"></span>
         </div>
         <p class="note" id="limits"></p>
+        <h2>Add links yourself</h2>
+        <p class="note">Paste job-list or company links from sites like Y Combinator, Indeed or Glassdoor, one per line. They are checked before the searched links.</p>
+        <textarea id="manualUrls" rows="4" placeholder="https://www.ycombinator.com/jobs/role/software-engineer" spellcheck="false" aria-label="Links to add, one per line"></textarea>
+        <div class="bar">
+          <label for="manualCountry">Open to people in</label>
+          <select id="manualCountry"><option value="ZZ">Anywhere</option></select>
+          <button id="manualAdd" class="btn" type="button">Add links</button>
+          <span id="manualNote" class="note"></span>
+        </div>
         <h2>Matching jobs</h2>
         <div class="tableWrap">
           <table>
