@@ -103,7 +103,9 @@ function renderNow() {
   const now = $('now');
   const stop = $('nowStop');
   const pauseBtn = $('nowPause');
-  pauseBtn.hidden = !run && !S.paused;
+  if (S.waiting && !run) { chrome.storage.local.remove('waiting'); S.waiting = null; } // left over from a run that no longer exists
+  // While the run waits for you to solve a check it is already holding still: Pause would do nothing, so it is not offered.
+  pauseBtn.hidden = (!run && !S.paused) || !!S.waiting;
   pauseBtn.textContent = S.paused ? 'Resume' : 'Pause';
   pauseBtn.onclick = () => chrome.storage.local.set({ paused: !S.paused });
   if (S.paused && run && !S.waiting) {

@@ -24,6 +24,7 @@ async function render() {
   const auto = st.auto || {};
   const active = RUNS.find(([k]) => st[k] && st[k].running);
   const limitHit = count >= DAILY_LIMIT;
+  if (st.waiting && !active) { chrome.storage.local.remove('waiting'); st.waiting = null; } // left over from a run that no longer exists
 
   $('count').textContent = count;
   $('segs').setAttribute('aria-label', `${count} of ${DAILY_LIMIT} pages used today`);
@@ -57,7 +58,7 @@ async function render() {
   // A pause flag with nothing running would only get in the way of the next run: clear it.
   if (st.paused && !active) chrome.storage.local.remove('paused');
   const pauseBtn = $('pause');
-  pauseBtn.hidden = !active;
+  pauseBtn.hidden = !active || !!st.waiting; // a run waiting for you to solve a check is already holding still
   pauseBtn.textContent = st.paused ? 'Resume' : 'Pause';
   pauseBtn.dataset.paused = st.paused ? '1' : '';
 

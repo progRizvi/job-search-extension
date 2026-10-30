@@ -306,7 +306,7 @@ async function analyzeJobsPage(patientMs = 3000) {
     .sort((x, y) => rank(y.title) - rank(x.title))
     .slice(0, 3);
   const textBackend = BACKEND_TITLE.test(text) ? (text.match(BACKEND_TITLE) || [''])[0] : '';
-  return { linkCount: document.querySelectorAll('a[href]').length, textLength: text.length, notFound: /\b(404|page not found|not found|doesn.t exist)\b/i.test(text.slice(0, 400)), noJobs, jobCount: all.length, listLinks: listLinks.slice(0, 2), backend, titles: all.slice(0, 200), text: text.replace(/\s+/g, ' ').trim().slice(0, 6000), textBackend, pageUrl: location.href.split('#')[0] };
+  return { title: document.title, linkCount: document.querySelectorAll('a[href]').length, textLength: text.length, notFound: /\b(404|page not found|not found|doesn.t exist)\b/i.test(text.slice(0, 400)), noJobs, jobCount: all.length, listLinks: listLinks.slice(0, 2), backend, titles: all.slice(0, 200), text: text.replace(/\s+/g, ' ').trim().slice(0, 6000), textBackend, pageUrl: location.href.split('#')[0] };
 }
 
 // Injected into a single job posting: its visible text, trimmed for the model.

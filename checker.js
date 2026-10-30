@@ -10,7 +10,7 @@ const MAX_SAVED = 5; // matching jobs kept when a page is not a long list
 const CHECK_FIT_RANK = { good: 2, maybe: 1, '': 0 };
 // A link that is itself one job. Such a page also lists "more jobs like this one": those are not a list to walk.
 const SINGLE_JOB_URL = /\/job-listing\/|\/viewjob|\/jobs\/view\/|ycombinator\.com\/companies\/[^/]+\/jobs\/|\/remote-jobs\/[^/]+-\d{5,}/i;
-const CAPTCHA_PAGE = /captcha|verify (that )?you.?re (a )?human|are you a robot|just a moment|checking your browser|humans only|prevent misuse|press (and|&) hold|security check/i;
+const CAPTCHA_PAGE = /captcha|verify (that )?you.?re (a )?human|verif(y|ies|ying) you are not a bot|not a bot|are you a robot|just a moment|checking your browser|checking if the site connection is secure|security verification|performing security|malicious bots|review the security of your connection|attention required|humans only|prevent misuse|press (and|&) hold|security check|cf-chl|ray id/i;
 const PAGE_BLOCKED = /captcha|verify (that )?you.?re (a )?human|are you a robot|access denied|enable javascript and cookies|just a moment|sign in to continue|log in to continue/i;
 
 async function getChecker() {
@@ -64,6 +64,19 @@ async function restIfNeeded(host) {
   return true;
 }
 
+// Reads a page, and tries again when the page moves on while it is being read. Challenge pages and redirects do
+// that, and the read then comes back empty. Returns null if it never gets a clean read.
+async function analyzePage(tabId, patientMs) {
+  for (let i = 0; i < 4; i++) {
+    try {
+      const r = await run(tabId, analyzeJobsPage, patientMs ? [patientMs] : undefined);
+      if (r) return r;
+    } catch { /* the page navigated mid-read */ }
+    await sleep(1500);
+  }
+  return null;
+}
+
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
 // Opens one job in a brand-new tab, reads it, and closes the tab, so nothing from the previous job can linger.
@@ -81,11 +94,11 @@ async function readJobText(windowId, url) {
     }
     let page = await run(tab.id, readJobPage);
     let text = `${page.title}. ${page.text}`;
-    if (CAPTCHA_PAGE.test(text.slice(0, 600))) {
+    if (CAPTCHA_PAGE.test(text.slice(0, 700))) {
       const solved = await waitForUser(tab.id, async () => {
         page = await run(tab.id, readJobPage);
         text = `${page.title}. ${page.text}`;
-        return !CAPTCHA_PAGE.test(text.slice(0, 600));
+        return !CAPTCHA_PAGE.test(text.slice(0, 700));
       }, `${hostOf(url)} is asking for a check (captcha).`, 15 * 60 * 1000);
       if (!solved) return '';
     }
@@ -183,7 +196,8 @@ async function walkList(listTab, page, item, country) {
       try { await openPage(listTab, more.next); } catch { break; }
     } else if (!more.clicked) break;
     let again;
-    try { again = await run(listTab, analyzeJobsPage, [8000]); } catch { break; }
+    again = await analyzePage(listTab, 8000);
+    if (!again) break;
     cards = again.titles.filter((t) => !seen.has(keyOf(t)));
     again.titles.forEach((t) => known.add(keyOf(t)));
     if (!cards.length) break;
@@ -194,7 +208,7 @@ async function walkList(listTab, page, item, country) {
 // Opens one saved link and returns what to store: {status, kind, results}.
 // A plain sentence for what a check found, for the status bar and the "Task complete" notification.
 function describeOutcome(out, found) {
-  if (out.status === 'unreachable') return 'could not read the page (blocked, empty or not found)';
+  if (out.status === 'unreachable') return out.error ? `an error stopped the check (${out.error.slice(0, 80)})` : 'could not read the page (blocked, empty or not found)';
   if (found) return `${found} matching ${found === 1 ? 'job' : 'jobs'} found`;
   const first = (out.results || [])[0] || {};
   if (first.openings === 'yes') return 'jobs were found but none fit';
@@ -209,20 +223,24 @@ async function checkUrl(tabId, item) {
   let r;
   try {
     landed = await openPage(tabId, item.url);
-    r = await run(tabId, analyzeJobsPage, [12000]);
+    r = await analyzePage(tabId, 12000);
   } catch {
     return unreachable;
   }
-  if (CAPTCHA_PAGE.test(r.text.slice(0, 600))) {
+  if (!r) return unreachable;
+  if (CAPTCHA_PAGE.test(`${r.title || ''} ${r.text.slice(0, 700)}`)) {
     // Wait for the user to solve it (up to 15 minutes), then read the page again.
     const solved = await waitForUser(tabId, async () => {
-      const again = await run(tabId, analyzeJobsPage);
-      if (!CAPTCHA_PAGE.test(again.text.slice(0, 600))) { r = again; return true; }
+      const again = await analyzePage(tabId);
+      if (!again) return false; // still moving: look again next time
+      if (!CAPTCHA_PAGE.test(`${again.title || ''} ${again.text.slice(0, 700)}`)) { r = again; return true; }
       return false;
     }, `${new URL(item.url).hostname} is asking for a check (captcha).`, 15 * 60 * 1000);
     if (!solved) return unreachable;
   }
   if (r.notFound || r.text.length < 80 || PAGE_BLOCKED.test(r.text.slice(0, 600))) return unreachable;
+  // Almost nothing on the page and no job links: it did not load properly (blocked or empty), so it is not "no jobs".
+  if ((r.textLength ?? r.text.length) < 600 && (r.linkCount ?? 99) <= 5 && !r.titles.length) return unreachable;
 
   if (!(await holdIfPaused())) return null;
   // One DeepSeek call: what kind of page is this, and which links lead to the job list if it is not one itself.
@@ -242,8 +260,8 @@ async function checkUrl(tabId, item) {
     for (const i of cls.follow.filter((n) => Number.isInteger(n) && links[n]).slice(0, 2)) {
       try {
         const u = await openPage(tabId, links[i].url);
-        const deeper = await run(tabId, analyzeJobsPage, [8000]);
-        if (!deeper.notFound && deeper.titles.length) { page = deeper; listUrl = u.split('#')[0]; break; }
+        const deeper = await analyzePage(tabId, 8000);
+        if (deeper && !deeper.notFound && deeper.titles.length) { page = deeper; listUrl = u.split('#')[0]; break; }
       } catch { /* try the next one */ }
     }
   }
@@ -335,7 +353,7 @@ async function checkLoop(onlyId = null) {
       let out;
       // Tell the server this link is still being worked on, so another browser does not take it.
       const beat = setInterval(() => serverFetch('/checker/heartbeat', { id: next.id }).catch(() => {}), 60000);
-      try { out = await checkUrl(tabId, next); } catch { out = { status: 'unreachable', kind: 'unknown' }; } finally { clearInterval(beat); }
+      try { out = await checkUrl(tabId, next); } catch (e) { out = { status: 'unreachable', kind: 'unknown', error: String((e && e.message) || e) }; console.error('checkUrl failed', e); } finally { clearInterval(beat); }
       if (!out) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);
       // Hold here too: a paused run must not record a result or close its window until it is resumed.
       if (!(await holdIfPaused())) return finishChecker(`Stopped by you. ${matches} matching jobs found.`, winId);

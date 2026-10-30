@@ -653,7 +653,7 @@ async function findJobsLoop() {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'start') {
-    chrome.storage.local.remove('paused');
+    chrome.storage.local.remove(['paused', 'waiting']);
     // Run in a dedicated, unfocused window: Chrome throttles scrolling and lazy
     // loading in background tabs, but a visible tab in its own window works normally.
     chrome.windows
@@ -674,7 +674,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if ((msg.recheck || msg.ids) && !(await chrome.storage.local.get('deepseekKey')).deepseekKey) {
         return sendResponse({ ok: false, error: 'Save a DeepSeek key first.' });
       }
-      await chrome.storage.local.remove('paused');
+      await chrome.storage.local.remove(['paused', 'waiting']);
       await setSites({ running: true });
       findSitesLoop(!!msg.recheck, Array.isArray(msg.ids) ? msg.ids : null);
       sendResponse({ ok: true });
@@ -684,7 +684,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'startCollector') {
     Promise.all([getAuto(), getSites(), getJobs(), getCollector(), getChecker()]).then(async ([a, st, j, c, k]) => {
       if (a.running || st.running || j.running || c.running || k.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
-      await chrome.storage.local.remove('paused');
+      await chrome.storage.local.remove(['paused', 'waiting']);
       await setCollector({ running: true, message: 'Starting…' });
       collectLoop();
       sendResponse({ ok: true });
@@ -694,7 +694,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'startChecker') {
     Promise.all([getAuto(), getSites(), getJobs(), getCollector(), getChecker()]).then(async ([a, st, j, c, k]) => {
       if (a.running || st.running || j.running || c.running || k.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
-      await chrome.storage.local.remove('paused');
+      await chrome.storage.local.remove(['paused', 'waiting']);
       await setChecker({ running: true, message: 'Starting…' });
       checkLoop(Number.isInteger(msg.id) ? msg.id : null);
       sendResponse({ ok: true });
@@ -712,7 +712,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'findJobs') {
     Promise.all([getAuto(), getSites(), getJobs(), getCollector(), getChecker()]).then(async ([a, st, j, c, k]) => {
       if (a.running || st.running || j.running || c.running || k.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
-      await chrome.storage.local.remove('paused');
+      await chrome.storage.local.remove(['paused', 'waiting']);
       await setJobs({ running: true });
       findJobsLoop();
       sendResponse({ ok: true });
@@ -737,6 +737,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-// A pause must not survive a browser restart.
-chrome.runtime.onStartup.addListener(() => chrome.storage.local.remove('paused'));
-chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove('paused'));
+// A pause, or a wait for a captcha, must not survive a browser restart or an extension reload.
+chrome.runtime.onStartup.addListener(() => chrome.storage.local.remove(['paused', 'waiting']));
+chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove(['paused', 'waiting']));
