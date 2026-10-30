@@ -3,15 +3,45 @@
   "name": "LinkedIn Company Copier",
   "version": "1.0.0",
   "description": "Copies company name, LinkedIn URL, location and website from LinkedIn company search results. Max 10 pages per day.",
-  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite", "downloads"],
-  "host_permissions": ["https://www.linkedin.com/*", "https://*.google.com/*", "http://*/*", "https://*/*", "https://api.deepseek.com/*"],
-  "background": { "service_worker": "background.js" },
-  "content_scripts": [
-    { "matches": ["https://www.linkedin.com/*"], "js": ["content.js"], "run_at": "document_idle" }
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "clipboardWrite",
+    "downloads"
   ],
-  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://*.google.com/*",
+    "http://*/*",
+    "https://*/*",
+    "https://api.deepseek.com/*",
+    "http://127.0.0.1:3917/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
-    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" },
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
     "default_popup": "popup.html",
     "default_title": "LinkedIn Company Copier"
   }

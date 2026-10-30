@@ -1,4 +1,4 @@
-importScripts('shared.js', 'xlsx.js', 'deepseek.js');
+importScripts('shared.js', 'xlsx.js', 'deepseek.js', 'serverClient.js', 'collector.js');
 
 const MAX_SKIPS = 3; // already-visited pages we will click through before giving up
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -653,8 +653,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'findSites') {
-    Promise.all([getAuto(), getSites(), getJobs()]).then(async ([a, st, j]) => {
-      if (a.running || st.running || j.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
+    Promise.all([getAuto(), getSites(), getJobs(), getCollector()]).then(async ([a, st, j, c]) => {
+      if (a.running || st.running || j.running || c.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
       if ((msg.recheck || msg.ids) && !(await chrome.storage.local.get('deepseekKey')).deepseekKey) {
         return sendResponse({ ok: false, error: 'Save a DeepSeek key first.' });
       }
@@ -664,9 +664,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     });
     return true;
   }
+  if (msg.type === 'startCollector') {
+    Promise.all([getAuto(), getSites(), getJobs(), getCollector()]).then(async ([a, st, j, c]) => {
+      if (a.running || st.running || j.running || c.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
+      await setCollector({ running: true, message: 'Starting…' });
+      collectLoop();
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+  if (msg.type === 'stopCollector') {
+    setCollector({ running: false }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
   if (msg.type === 'findJobs') {
-    Promise.all([getAuto(), getSites(), getJobs()]).then(async ([a, st, j]) => {
-      if (a.running || st.running || j.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
+    Promise.all([getAuto(), getSites(), getJobs(), getCollector()]).then(async ([a, st, j, c]) => {
+      if (a.running || st.running || j.running || c.running) return sendResponse({ ok: false, error: 'Another run is already active.' });
       await setJobs({ running: true });
       findJobsLoop();
       sendResponse({ ok: true });

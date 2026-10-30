@@ -3,6 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "start": "node --env-file=.env index.js", "test": "node --env-file=.env --test test/*.test.js" },
+  "scripts": { "start": "node --env-file=.env index.js", "test": "node --env-file=.env --test --test-concurrency=1 test/*.test.js" },
   "dependencies": { "express": "^4.21.2", "mysql2": "^3.11.5" }
 }
